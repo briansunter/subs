@@ -5,6 +5,16 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mockSheetsService } from "../mocks/sheets";
 
+// Type for API responses
+interface ApiResponse {
+  success?: boolean;
+  error?: string;
+  message?: string;
+  status?: string;
+  timestamp?: string;
+  data?: unknown;
+}
+
 const TEST_PORT = 3012;
 const BASE_URL = `http://localhost:${TEST_PORT}`;
 
@@ -66,12 +76,12 @@ describe("Health Check with Connection Validation", () => {
       await startServer();
 
       const response = await fetch(`${BASE_URL}/api/health`);
-      const data = await response.json();
+      const data = (await response.json()) as ApiResponse;
 
       expect(response.status).toBe(200);
       expect(data).toHaveProperty("status", "ok");
       expect(data).toHaveProperty("timestamp");
-      expect(new Date(data.timestamp)).toBeInstanceOf(Date);
+      expect(data.timestamp ? new Date(data.timestamp) : undefined).toBeDefined();
     });
 
     test("should respond quickly", async () => {
@@ -154,7 +164,7 @@ describe("Health Check with Connection Validation", () => {
       await startServer();
 
       const response = await fetch(`${BASE_URL}/api/health`);
-      const data = await response.json();
+      const data = (await response.json()) as ApiResponse;
 
       expect(data).toMatchObject({
         status: expect.any(String),
@@ -166,9 +176,9 @@ describe("Health Check with Connection Validation", () => {
       await startServer();
 
       const response = await fetch(`${BASE_URL}/api/health`);
-      const data = await response.json();
+      const data = (await response.json()) as ApiResponse;
 
-      expect(() => new Date(data.timestamp)).not.toThrow();
+      expect(data.timestamp && new Date(data.timestamp)).toBeTruthy();
       expect(data.timestamp).toMatch(/^\d{4}-\d{2}-\d{2}T/);
     });
   });
@@ -205,7 +215,7 @@ describe("Health Check with Connection Validation", () => {
       });
 
       const response = await fetch(`${BASE_URL}/api/stats`);
-      const data = await response.json();
+      const data = (await response.json()) as ApiResponse;
 
       // Should return error indicating connection issue
       if (response.status === 500) {
@@ -311,7 +321,7 @@ describe("Health Check with Mocked Services", () => {
     // This would require implementing an extended health endpoint
     // that checks actual connection status
     const response = await fetch(`${BASE_URL}/api/health`);
-    const data = await response.json();
+    const data = (await response.json()) as ApiResponse;
 
     expect(data).toHaveProperty("status");
     // Future: expect(data).toHaveProperty("services");

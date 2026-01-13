@@ -56,7 +56,7 @@ describe("Signup Schema Validation", () => {
 
       expect(result.success).toBe(false);
       if (!result.success) {
-        expect(result.error.issues[0].message).toBe("Invalid email format");
+        expect(result.error.issues[0]?.message).toBe("Invalid email format");
       }
     });
 
@@ -67,7 +67,7 @@ describe("Signup Schema Validation", () => {
 
       expect(result.success).toBe(false);
       if (!result.success) {
-        expect(result.error.issues[0].message).toBe("Email is required");
+        expect(result.error.issues[0]?.message).toBe("Email is required");
       }
     });
 

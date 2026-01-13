@@ -72,7 +72,7 @@ export const mockSheetsService = {
   // Verify specific calls
   assertCalledWithEmail(email: string): boolean {
     return operationLog.some(
-      (op) => op.operation === "appendSignup" && op.data?.email === email
+      (op) => op.operation === "appendSignup" && op.data?.["email"] === email,
     );
   },
 

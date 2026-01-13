@@ -2,6 +2,39 @@
  * Environment configuration for the signup API
  */
 
+import { z } from "zod";
+
+/**
+ * Zod schema for environment variable validation
+ */
+const envSchema = z.object({
+  // Server
+  PORT: z
+    .string()
+    .default("3000")
+    .transform((val) => parseInt(val, 10)),
+  HOST: z.string().default("0.0.0.0"),
+
+  // Google Sheets
+  GOOGLE_SHEET_ID: z.string().min(1, "GOOGLE_SHEET_ID is required"),
+  GOOGLE_CREDENTIALS_EMAIL: z.string().min(1, "GOOGLE_CREDENTIALS_EMAIL is required"),
+  GOOGLE_PRIVATE_KEY: z.string().min(1, "GOOGLE_PRIVATE_KEY is required"),
+  DEFAULT_SHEET_TAB: z.string().default("Sheet1"),
+
+  // Discord (optional)
+  DISCORD_WEBHOOK_URL: z.string().optional(),
+
+  // CORS
+  ALLOWED_ORIGINS: z
+    .string()
+    .default("*")
+    .transform((val) => val.split(",").map((origin) => origin.trim())),
+
+  // Node environment
+  NODE_ENV: z.string().default("development"),
+  LOG_LEVEL: z.string().default("info"),
+});
+
 export interface SignupConfig {
   // Server
   port: number;
@@ -21,48 +54,49 @@ export interface SignupConfig {
 }
 
 function loadEnv(): SignupConfig {
-  const port = parseInt(process.env.PORT || "3000", 10);
-  const host = process.env.HOST || "0.0.0.0";
-
-  // Google Sheets configuration
-  const googleSheetId = process.env.GOOGLE_SHEET_ID;
-  if (!googleSheetId) {
-    throw new Error("GOOGLE_SHEET_ID is required");
-  }
-
-  const googleCredentialsEmail = process.env.GOOGLE_CREDENTIALS_EMAIL;
-  if (!googleCredentialsEmail) {
-    throw new Error("GOOGLE_CREDENTIALS_EMAIL is required");
-  }
-
-  const googlePrivateKey = process.env.GOOGLE_PRIVATE_KEY;
-  if (!googlePrivateKey) {
-    throw new Error("GOOGLE_PRIVATE_KEY is required");
-  }
+  // Parse and validate environment variables with Zod
+  const env = envSchema.parse(process.env);
 
   // Replace \n with actual newlines in private key
-  const formattedPrivateKey = googlePrivateKey.replace(/\\n/g, "\n");
-
-  const defaultSheetTab = process.env.DEFAULT_SHEET_TAB || "Sheet1";
-
-  // Discord webhook (optional)
-  const discordWebhookUrl = process.env.DISCORD_WEBHOOK_URL;
-
-  // CORS allowed origins
-  const allowedOrigins = process.env.ALLOWED_ORIGINS
-    ? process.env.ALLOWED_ORIGINS.split(",").map((origin) => origin.trim())
-    : ["*"];
+  const formattedPrivateKey = env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, "\n");
 
   return {
-    port,
-    host,
-    googleSheetId,
-    googleCredentialsEmail,
+    port: env.PORT,
+    host: env.HOST,
+    googleSheetId: env.GOOGLE_SHEET_ID,
+    googleCredentialsEmail: env.GOOGLE_CREDENTIALS_EMAIL,
     googlePrivateKey: formattedPrivateKey,
-    defaultSheetTab,
-    discordWebhookUrl,
-    allowedOrigins,
+    defaultSheetTab: env.DEFAULT_SHEET_TAB,
+    discordWebhookUrl: env.DISCORD_WEBHOOK_URL,
+    allowedOrigins: env.ALLOWED_ORIGINS,
   };
 }
 
-export const config = loadEnv();
+// Cached config
+let cachedConfig: SignupConfig | undefined;
+
+/**
+ * Get the current configuration
+ * Loads from environment on first call, returns cached value thereafter
+ */
+export function getConfig(): SignupConfig {
+  if (!cachedConfig) {
+    cachedConfig = loadEnv();
+  }
+  return cachedConfig;
+}
+
+/**
+ * Clear the config cache
+ * Call this in tests before setting environment variables
+ */
+export function clearConfigCache(): void {
+  cachedConfig = undefined;
+}
+
+// For backwards compatibility, export a getter that accesses the cache
+export const config: SignupConfig = new Proxy({} as never, {
+  get(_target, prop) {
+    return getConfig()[prop as keyof SignupConfig];
+  },
+});

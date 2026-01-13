@@ -18,7 +18,13 @@
     "lineEnding": "lf",
     "lineWidth": 100
   },
-  "assist": { "actions": { "source": { "organizeImports": "on" } } },
+  "assist": {
+    "actions": {
+      "source": {
+        "organizeImports": "on"
+      }
+    }
+  },
   "linter": {
     "enabled": true,
     "rules": {
@@ -28,15 +34,16 @@
       },
       "complexity": {
         "recommended": true,
-        "noForEach": "off",
-        "useLiteralKeys": "warn"
+        "noForEach": "error",
+        "useLiteralKeys": "error",
+        "noUselessTernary": "error",
+        "noExtraBooleanCast": "error"
       },
       "correctness": {
         "recommended": true,
         "noUnusedVariables": "error",
-        "useExhaustiveDependencies": "warn",
-        "useHookAtTopLevel": "error",
-        "noNodeImport": "error"
+        "useExhaustiveDependencies": "error",
+        "useHookAtTopLevel": "error"
       },
       "performance": {
         "recommended": true
@@ -46,20 +53,22 @@
       },
       "style": {
         "recommended": true,
-        "noNegationElse": "warn",
-        "noParameterAssign": "warn",
+        "noNegationElse": "error",
+        "noParameterAssign": "error",
         "useConst": "error",
-        "useTemplate": "warn",
-        "noNonNullAssertion": "warn"
+        "useTemplate": "error",
+        "noNonNullAssertion": "error",
+        "noUselessElse": "error"
       },
       "suspicious": {
         "recommended": true,
-        "noArrayIndexKey": "warn",
+        "noArrayIndexKey": "error",
         "noExplicitAny": "error",
-        "noExtraNonNullAssertion": "error"
+        "noExtraNonNullAssertion": "error",
+        "noSelfCompare": "error"
       },
       "nursery": {
-        "useSortedClasses": "warn"
+        "useSortedClasses": "error"
       }
     }
   },
@@ -77,6 +86,18 @@
     },
     "globals": ["Bun"]
   },
+  "overrides": [
+    {
+      "includes": ["**/*.ts", "**/*.tsx"],
+      "linter": {
+        "rules": {
+          "complexity": {
+            "useLiteralKeys": "off"
+          }
+        }
+      }
+    }
+  ],
   "json": {
     "formatter": {
       "enabled": true,
@@ -85,17 +106,5 @@
       "lineEnding": "lf",
       "lineWidth": 100
     }
-  },
-  "overrides": [
-    {
-      "includes": ["**/*.test.ts", "**/*.test.tsx", "**/*.spec.ts", "**/*.spec.tsx"],
-      "linter": {
-        "rules": {
-          "suspicious": {
-            "noExplicitAny": "warn"
-          }
-        }
-      }
-    }
-  ]
+  }
 }

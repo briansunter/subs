@@ -37,7 +37,7 @@ export const SERVER_READY_POLL_INTERVAL = 100;
  */
 export async function createTestServer(
   port: number = DEFAULT_TEST_PORT,
-  envOverrides: Record<string, string> = {}
+  envOverrides: Record<string, string> = {},
 ): Promise<TestServer> {
   const server = spawn("bun", ["run", "index.ts"], {
     env: {
@@ -73,7 +73,7 @@ export async function createTestServer(
  */
 export async function waitForServer(
   url: string,
-  timeout: number = SERVER_READY_TIMEOUT
+  timeout: number = SERVER_READY_TIMEOUT,
 ): Promise<boolean> {
   const startTime = Date.now();
   const healthUrl = `${url}/api/health`;
@@ -111,7 +111,7 @@ export async function waitForServer(
 export async function testRequest(
   server: TestServer,
   path: string,
-  options: RequestInit = {}
+  options: RequestInit = {},
 ): Promise<Response> {
   return fetch(`${server.url}${path}`, {
     ...options,
@@ -130,11 +130,7 @@ export async function testRequest(
  * @param data - Request body data
  * @returns Fetch response
  */
-export async function testPost(
-  server: TestServer,
-  path: string,
-  data: unknown
-): Promise<Response> {
+export async function testPost(server: TestServer, path: string, data: unknown): Promise<Response> {
   return testRequest(server, path, {
     method: "POST",
     body: JSON.stringify(data),
@@ -148,10 +144,7 @@ export async function testPost(
  * @param path - Request path
  * @returns Fetch response
  */
-export async function testGet(
-  server: TestServer,
-  path: string
-): Promise<Response> {
+export async function testGet(server: TestServer, path: string): Promise<Response> {
   return testRequest(server, path, {
     method: "GET",
   });

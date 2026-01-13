@@ -2,7 +2,6 @@
  * Discord webhook service for sending notifications
  */
 
-import { config } from "../config";
 import { createChildLogger } from "../utils/logger";
 
 const logger = createChildLogger("discord");
@@ -27,15 +26,20 @@ interface DiscordWebhookPayload {
 
 /**
  * Send notification to Discord webhook
+ * @param payload - The webhook payload to send
+ * @param webhookUrl - The Discord webhook URL (optional, skips sending if not provided)
  */
-export async function sendDiscordNotification(payload: DiscordWebhookPayload): Promise<void> {
-  if (!config.discordWebhookUrl) {
+export async function sendDiscordNotification(
+  payload: DiscordWebhookPayload,
+  webhookUrl?: string,
+): Promise<void> {
+  if (!webhookUrl) {
     logger.debug("Discord webhook URL not configured, skipping notification");
     return;
   }
 
   try {
-    const response = await fetch(config.discordWebhookUrl, {
+    const response = await fetch(webhookUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -58,14 +62,19 @@ export async function sendDiscordNotification(payload: DiscordWebhookPayload): P
 
 /**
  * Send signup notification to Discord
+ * @param data - Signup data to include in notification
+ * @param webhookUrl - The Discord webhook URL (optional)
  */
-export async function sendSignupNotification(data: {
-  email: string;
-  sheetTab: string;
-  name?: string;
-  source?: string;
-  tags?: string[];
-}): Promise<void> {
+export async function sendSignupNotification(
+  data: {
+    email: string;
+    sheetTab: string;
+    name?: string;
+    source?: string;
+    tags?: string[];
+  },
+  webhookUrl?: string,
+): Promise<void> {
   const fields: Array<{ name: string; value: string; inline?: boolean }> = [
     { name: "Email", value: data.email, inline: true },
     { name: "Sheet Tab", value: data.sheetTab, inline: true },
@@ -91,19 +100,27 @@ export async function sendSignupNotification(data: {
     timestamp: new Date().toISOString(),
   };
 
-  await sendDiscordNotification({
-    username: "Signup Bot",
-    embeds: [embed],
-  });
+  await sendDiscordNotification(
+    {
+      username: "Signup Bot",
+      embeds: [embed],
+    },
+    webhookUrl,
+  );
 }
 
 /**
  * Send error notification to Discord
+ * @param error - Error data to include in notification
+ * @param webhookUrl - The Discord webhook URL (optional)
  */
-export async function sendErrorNotification(error: {
-  message: string;
-  context?: Record<string, unknown>;
-}): Promise<void> {
+export async function sendErrorNotification(
+  error: {
+    message: string;
+    context?: Record<string, unknown>;
+  },
+  webhookUrl?: string,
+): Promise<void> {
   const embed: DiscordEmbed = {
     title: "❌ Signup Error",
     description: error.message,
@@ -119,8 +136,11 @@ export async function sendErrorNotification(error: {
     }));
   }
 
-  await sendDiscordNotification({
-    username: "Signup Bot",
-    embeds: [embed],
-  });
+  await sendDiscordNotification(
+    {
+      username: "Signup Bot",
+      embeds: [embed],
+    },
+    webhookUrl,
+  );
 }

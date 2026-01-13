@@ -1,111 +1,90 @@
----
-description: Use Bun instead of Node.js, npm, pnpm, or vite.
-globs: "*.ts, *.tsx, *.html, *.css, *.js, *.jsx, package.json"
-alwaysApply: false
----
+# CLAUDE.md
 
-Default to using Bun instead of Node.js.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-- Use `bun <file>` instead of `node <file>` or `ts-node <file>`
-- Use `bun test` instead of `jest` or `vitest`
-- Use `bun build <file.html|file.ts|file.css>` instead of `webpack` or `esbuild`
-- Use `bun install` instead of `npm install` or `yarn install` or `pnpm install`
-- Use `bun run <script>` instead of `npm run <script>` or `yarn run <script>` or `pnpm run <script>`
-- Bun automatically loads .env, so don't use dotenv.
+## Project
 
-## APIs
+Bun-based email signup API built with Fastify, TypeScript, Google Sheets, and Discord webhooks. Validates email signups, stores them in Google Sheets, and optionally sends Discord notifications.
 
-- `Bun.serve()` supports WebSockets, HTTPS, and routes. Don't use `express`.
-- `bun:sqlite` for SQLite. Don't use `better-sqlite3`.
-- `Bun.redis` for Redis. Don't use `ioredis`.
-- `Bun.sql` for Postgres. Don't use `pg` or `postgres.js`.
-- `WebSocket` is built-in. Don't use `ws`.
-- Prefer `Bun.file` over `node:fs`'s readFile/writeFile
-- Bun.$`ls` instead of execa.
+## Commands
 
-## Testing
+### Development
+- `bun run dev` - Start development server with hot reload
+- `bun run start` - Start production server
 
-Use `bun test` to run tests.
+### Testing
+- `bun test` - Run all tests
+- `bun test test/unit` - Run unit tests only
+- `bun test test/integration` - Run integration tests only
+- `bun test --coverage` - Run tests with coverage report
+- `bun test <test-file-path>` - Run a specific test file (e.g., `bun test test/unit/routes/handlers.test.ts`)
 
-```ts#index.test.ts
-import { test, expect } from "bun:test";
+### Docker
+- `bun run docker:build` - Build Docker image
+- `bun run docker:up` - Start containers with Docker Compose
+- `bun run docker:down` - Stop Docker Compose containers
+- `bun run docker:logs` - View Docker logs
 
-test("hello world", () => {
-  expect(1).toBe(1);
-});
+## Code Quality
+
+**Biome** is used for linting and formatting. Run with:
+- `bunx biome check .` - Lint all files
+- `bunx biome check --write .` - Auto-fix issues
+- `bunx biome format --write .` - Format files
+
+Biome config includes strict rules: `noForEach`, `useLiteralKeys`, `noExplicitAny`, `noNonNullAssertion`. Organize imports is enabled as an assist action.
+
+## Architecture
+
+### Layered Architecture with Dependency Injection
+
+```
+Request → Fastify Routes → Handlers (business logic) → Services (external integrations)
 ```
 
-## Frontend
+**Key Pattern**: Route handlers in `src/routes/handlers.ts` are extracted from Fastify routes for testability. They accept a `SignupContext` interface for dependency injection, allowing unit tests to provide mock services.
 
-Use HTML imports with `Bun.serve()`. Don't use `vite`. HTML imports fully support React, CSS, Tailwind.
+- `src/routes/signup.ts` - Fastify route definitions with Zod type provider
+- `src/routes/handlers.ts` - Pure business logic functions (not coupled to Fastify)
+- `src/services/sheets.ts` - Google Sheets integration (cached client instance)
+- `src/services/discord.ts` - Discord webhook notifications (fire-and-forget)
+- `src/schemas/signup.ts` - Zod validation schemas for all request/response types
 
-Server:
+### Configuration
 
-```ts#index.ts
-import index from "./index.html"
+`src/config.ts` uses Zod to validate environment variables on startup. The config is cached and exported via a Proxy for backwards compatibility. In tests, call `clearConfigCache()` before setting environment variables.
 
-Bun.serve({
-  routes: {
-    "/": index,
-    "/api/users/:id": {
-      GET: (req) => {
-        return new Response(JSON.stringify({ id: req.params.id }));
-      },
-    },
-  },
-  // optional websocket support
-  websocket: {
-    open: (ws) => {
-      ws.send("Hello, world!");
-    },
-    message: (ws, message) => {
-      ws.send(message);
-    },
-    close: (ws) => {
-      // handle close
-    }
-  },
-  development: {
-    hmr: true,
-    console: true,
-  }
-})
-```
+### Testing Patterns
 
-HTML files can import .tsx, .jsx or .js files directly and Bun's bundler will transpile & bundle automatically. `<link>` tags can point to stylesheets and Bun's CSS bundler will bundle.
+**Integration tests** use Fastify's `inject()` method for fast HTTP simulation without spawning a server. See `test/helpers/test-app.ts` for the test app setup.
 
-```html#index.html
-<html>
-  <body>
-    <h1>Hello, world!</h1>
-    <script type="module" src="./frontend.tsx"></script>
-  </body>
-</html>
-```
+**Unit tests** mock services using the `SignupContext` interface. See `test/mocks/discord.ts` and `test/mocks/sheets.ts` for example mocks.
 
-With the following `frontend.tsx`:
+**Test helpers**:
+- `getTestApp()` - Get or create Fastify app instance
+- `injectRequest()` / `injectPost()` / `injectGet()` - Make test requests
+- `setTestEnv()` / `clearTestEnv()` - Manage test environment variables
+- `DEFAULT_TEST_ENV` - Default test environment configuration
 
-```tsx#frontend.tsx
-import React from "react";
+### Type-Safe Routing with Zod
 
-// import .css files directly and it works
-import './index.css';
+The project uses `fastify-type-provider-zod` for compile-time type safety. Routes are defined with Zod schemas in the route options, and Fastify automatically validates/serializes using those schemas. Custom error handling in `signupRoutes` formats Zod validation errors consistently.
 
-import { createRoot } from "react-dom/client";
+### Async Error Handling
 
-const root = createRoot(document.body);
+Discord notifications are fire-and-forget: they're awaited but errors are caught and logged without failing the request. This ensures signup failures aren't caused by notification issues.
 
-export default function Frontend() {
-  return <h1>Hello, world!</h1>;
-}
+## Environment Variables
 
-root.render(<Frontend />);
-```
+Required:
+- `GOOGLE_SHEET_ID` - Google Sheet ID
+- `GOOGLE_CREDENTIALS_EMAIL` - Service account email
+- `GOOGLE_PRIVATE_KEY` - Service account private key (use `\n` for line breaks in .env)
 
-Then, run index.ts
-
-```sh
-bun --hot ./index.ts
-```
-
-For more information, read the Bun API docs in `node_modules/bun-types/docs/**.md`.
+Optional:
+- `DEFAULT_SHEET_TAB` - Default sheet tab name (default: "Sheet1")
+- `DISCORD_WEBHOOK_URL` - Discord webhook URL for notifications
+- `ALLOWED_ORIGINS` - Comma-separated CORS origins (default: "*")
+- `PORT` - Server port (default: 3000)
+- `HOST` - Server host (default: "0.0.0.0")
+- `LOG_LEVEL` - Pino log level (default: "info")

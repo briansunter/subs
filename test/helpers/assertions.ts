@@ -8,9 +8,7 @@ import { expect } from "bun:test";
 /**
  * Assert that a response indicates success
  */
-export function assertSuccessResponse(
-  data: { success: boolean }
-): void {
+export function assertSuccessResponse(data: { success: boolean }): void {
   expect(data.success).toBe(true);
 }
 
@@ -19,7 +17,7 @@ export function assertSuccessResponse(
  */
 export function assertErrorResponse(
   data: { success: boolean; statusCode?: number },
-  statusCode?: number
+  statusCode?: number,
 ): void {
   expect(data.success).toBe(false);
   if (statusCode !== undefined) {
@@ -34,7 +32,7 @@ export function assertSignupNotification(
   mockDiscord: {
     getNotifications: () => readonly { type: string; payload: unknown }[];
   },
-  email: string
+  email: string,
 ): void {
   const notifications = mockDiscord.getNotifications();
   const signupNotifications = notifications.filter((n) => n.type === "signup");
@@ -64,7 +62,7 @@ export function assertErrorNotification(
   mockDiscord: {
     getNotifications: () => readonly { type: string; payload: unknown }[];
   },
-  message: string
+  message: string,
 ): void {
   const notifications = mockDiscord.getNotifications();
   const errorNotifications = notifications.filter((n) => n.type === "error");
@@ -87,10 +85,7 @@ export function assertErrorNotification(
 /**
  * Assert that a response has the expected status code
  */
-export function assertStatusCode(
-  response: Response,
-  expectedStatus: number
-): void {
+export function assertStatusCode(response: Response, expectedStatus: number): void {
   expect(response.status).toBe(expectedStatus);
 }
 
@@ -100,7 +95,7 @@ export function assertStatusCode(
 export function assertHeader(
   response: Response,
   header: string,
-  expectedValue: string | RegExp
+  expectedValue: string | RegExp,
 ): void {
   const headerValue = response.headers.get(header);
   expect(headerValue).toBeDefined();
@@ -115,9 +110,7 @@ export function assertHeader(
 /**
  * Assert that response is valid JSON
  */
-export async function assertValidJson(
-  response: Response
-): Promise<unknown> {
+export async function assertValidJson(response: Response): Promise<unknown> {
   const contentType = response.headers.get("content-type");
   expect(contentType).toMatch(/application\/json/);
 
@@ -130,7 +123,7 @@ export async function assertValidJson(
  */
 export function assertResponseShape<T extends Record<string, unknown>>(
   data: unknown,
-  shape: { [K in keyof T]?: (value: T[K]) => void }
+  shape: { [K in keyof T]?: (value: T[K]) => void },
 ): void {
   expect(data).toBeDefined();
   expect(typeof data).toBe("object");
@@ -148,35 +141,25 @@ export function assertResponseShape<T extends Record<string, unknown>>(
  * Type guard for successful handler responses
  */
 export function isSuccessResponse(
-  data: unknown
+  data: unknown,
 ): data is { success: true; statusCode: number; message?: string; data?: unknown } {
-  return (
-    typeof data === "object" &&
-    data !== null &&
-    "success" in data &&
-    data.success === true
-  );
+  return typeof data === "object" && data !== null && "success" in data && data.success === true;
 }
 
 /**
  * Type guard for error handler responses
  */
 export function isErrorResponse(
-  data: unknown
+  data: unknown,
 ): data is { success: false; statusCode: number; error: string; details?: string[] } {
-  return (
-    typeof data === "object" &&
-    data !== null &&
-    "success" in data &&
-    data.success === false
-  );
+  return typeof data === "object" && data !== null && "success" in data && data.success === false;
 }
 
 /**
  * Type guard for health check response
  */
 export function isHealthCheckResponse(
-  data: unknown
+  data: unknown,
 ): data is { status: string; timestamp: string } {
   return (
     typeof data === "object" &&
@@ -192,7 +175,7 @@ export function isHealthCheckResponse(
  * Type guard for stats response
  */
 export function isStatsResponse(
-  data: unknown
+  data: unknown,
 ): data is { totalSignups: number; sheetTabs: string[] } {
   return (
     typeof data === "object" &&
@@ -208,7 +191,7 @@ export function isStatsResponse(
  * Type guard for bulk signup result response
  */
 export function isBulkResultResponse(
-  data: unknown
+  data: unknown,
 ): data is { success: number; failed: number; duplicates: number; errors: string[] } {
   return (
     typeof data === "object" &&

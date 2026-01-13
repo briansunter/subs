@@ -8,8 +8,19 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mockDiscordService } from "../mocks/discord";
 import { mockSheetsService } from "../mocks/sheets";
 
+// Type for API responses
+interface ApiResponse {
+  success?: boolean;
+  error?: string;
+  message?: string;
+  details?: string[];
+  status?: string;
+  timestamp?: string;
+  data?: unknown;
+}
+
 // Store server process
-let serverProcess: Bun.Process | null = null;
+let serverProcess: { kill: () => void } | null = null;
 const TEST_PORT = 3011;
 const BASE_URL = `http://localhost:${TEST_PORT}`;
 
@@ -71,7 +82,7 @@ describe("Signup API Integration Tests", () => {
   describe("GET /api/health", () => {
     test("should return healthy status", async () => {
       const response = await fetch(`${BASE_URL}/api/health`);
-      const data = await response.json();
+      const data = (await response.json()) as ApiResponse;
 
       expect(response.status).toBe(200);
       expect(data.status).toBe("ok");
@@ -89,7 +100,7 @@ describe("Signup API Integration Tests", () => {
       });
 
       const response = await fetch(`${BASE_URL}/api/stats`);
-      const _data = await response.json();
+      await response.json(); // Consume the response body
 
       // Note: This will fail with auth error due to test credentials
       // but we can test the endpoint exists
@@ -113,7 +124,7 @@ describe("Signup API Integration Tests", () => {
         }),
       });
 
-      const data = await response.json();
+      const data = (await response.json()) as ApiResponse;
 
       expect(response.status).toBe(400);
       expect(data.success).toBe(false);
@@ -132,7 +143,7 @@ describe("Signup API Integration Tests", () => {
         }),
       });
 
-      const data = await response.json();
+      const data = (await response.json()) as ApiResponse;
 
       // Should either succeed (200) or fail on sheets auth (500)
       expect([200, 500]).toContain(response.status);
@@ -151,7 +162,7 @@ describe("Signup API Integration Tests", () => {
         body: JSON.stringify({}),
       });
 
-      const data = await response.json();
+      const data = (await response.json()) as ApiResponse;
 
       expect(response.status).toBe(400);
       expect(data.success).toBe(false);
@@ -198,7 +209,7 @@ describe("Signup API Integration Tests", () => {
         }),
       });
 
-      const _data = await response.json();
+      await response.json(); // Consume the response body
 
       expect([200, 500]).toContain(response.status);
     });
@@ -213,7 +224,7 @@ describe("Signup API Integration Tests", () => {
         }),
       });
 
-      const data = await response.json();
+      const data = (await response.json()) as ApiResponse;
 
       expect(response.status).toBe(400);
       expect(data.success).toBe(false);
@@ -247,7 +258,7 @@ describe("Signup API Integration Tests", () => {
         }),
       });
 
-      const _data = await response.json();
+      await response.json(); // Consume the response body
 
       expect([200, 500]).toContain(response.status);
     });
@@ -261,7 +272,7 @@ describe("Signup API Integration Tests", () => {
         }),
       });
 
-      const data = await response.json();
+      const data = (await response.json()) as ApiResponse;
 
       expect(response.status).toBe(400);
       expect(data.success).toBe(false);
@@ -278,7 +289,7 @@ describe("Signup API Integration Tests", () => {
         body: JSON.stringify({ signups }),
       });
 
-      const data = await response.json();
+      const data = (await response.json()) as ApiResponse;
 
       expect(response.status).toBe(400);
       expect(data.success).toBe(false);
@@ -297,7 +308,7 @@ describe("Signup API Integration Tests", () => {
         }),
       });
 
-      const data = await response.json();
+      const data = (await response.json()) as ApiResponse;
 
       expect(response.status).toBe(400);
       expect(data.success).toBe(false);

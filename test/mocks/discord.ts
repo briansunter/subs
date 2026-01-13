@@ -10,15 +10,27 @@ interface NotificationEntry {
 
 let mockNotifications: NotificationEntry[] = [];
 let mockError: Error | null = null;
+let mockSignupError: Error | null = null;
+let mockErrorNotificationError: Error | null = null;
 
 export const mockDiscordService = {
   reset() {
     mockNotifications = [];
     mockError = null;
+    mockSignupError = null;
+    mockErrorNotificationError = null;
   },
 
   setError(error: Error | null) {
     mockError = error;
+  },
+
+  setSignupError(error: Error | null) {
+    mockSignupError = error;
+  },
+
+  setErrorNotificationError(error: Error | null) {
+    mockErrorNotificationError = error;
   },
 
   getNotifications(): NotificationEntry[] {
@@ -88,7 +100,8 @@ export const mockDiscordService = {
     source?: string;
     tags?: string[];
   }) => {
-    if (mockError) throw mockError;
+    // Check specific error first, then general error
+    if (mockSignupError || mockError) throw mockSignupError || mockError;
 
     const fields: Array<{ name: string; value: string; inline?: boolean }> = [
       { name: "Email", value: data.email, inline: true },
@@ -126,7 +139,8 @@ export const mockDiscordService = {
   },
 
   sendErrorNotification: async (data: { message: string; context?: Record<string, unknown> }) => {
-    if (mockError) throw mockError;
+    // Check specific error first, then general error
+    if (mockErrorNotificationError || mockError) throw mockErrorNotificationError || mockError;
 
     const embed: {
       title: string;

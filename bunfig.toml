@@ -1,0 +1,5 @@
+[test]
+# Integration tests can run concurrently using Fastify inject()
+# Unit tests run sequentially by default
+concurrentTestGlob = ["**/integration/**/*.test.ts"]
+maxConcurrency = 10

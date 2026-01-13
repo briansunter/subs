@@ -6,10 +6,12 @@ import { z } from "zod";
 
 /**
  * Email validation with strict format checking
+ * RFC 5321 specifies maximum email length of 254 characters
  */
 export const emailSchema = z
   .string()
   .min(1, "Email is required")
+  .max(254, "Email address is too long (max 254 characters)")
   .regex(/^[^\s@]+@[^\s@]+\.[^\s@]+$/, "Invalid email format")
   .toLowerCase()
   .trim();

@@ -358,7 +358,6 @@ describe("Metrics Endpoint Integration Tests", () => {
 
       await injectPost("/api/signup", {
         email: "test@example.com",
-        turnstileToken: "valid-test-token",
         turnstileToken: "invalid-token",
       });
 

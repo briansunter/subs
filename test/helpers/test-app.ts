@@ -9,6 +9,9 @@ import { clearConfigCache as _clearConfigCache, config } from "../../src/config"
 import { signupRoutes } from "../../src/routes/signup";
 import "../../src/schemas/signup";
 
+// Import metrics to ensure they're registered for tests
+import "../../src/services/metrics";
+
 // Re-export clearConfigCache for convenience
 export { _clearConfigCache as clearConfigCache };
 

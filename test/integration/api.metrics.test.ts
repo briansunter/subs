@@ -160,9 +160,14 @@ describe("Metrics Endpoint Integration Tests", () => {
 
   describe("Signup Metrics Recording", () => {
     test("should record successful signup", async () => {
-      await injectPost("/api/signup", {
+      const signupResponse = await injectPost("/api/signup", {
         email: "test@example.com",
+        turnstileToken: "valid-test-token", // Valid test token
       });
+
+      // First check if signup succeeded
+      console.log("Signup response status:", signupResponse.statusCode);
+      console.log("Signup response body:", signupResponse.json());
 
       const response = await app.inject({
         method: "GET",
@@ -170,6 +175,8 @@ describe("Metrics Endpoint Integration Tests", () => {
       });
 
       const body = response.body;
+      console.log("Metrics response (first 500 chars):", body.substring(0, 500));
+
       expect(body).toContain("signup_requests_total");
       expect(body).toContain('endpoint="/api/signup"');
       expect(body).toContain('status="success"');

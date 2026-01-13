@@ -1,20 +1,16 @@
 /**
- * Logging utility using Pino
+ * Production logger for Bun
+ * Pino is the fastest logger for Bun runtime
  */
 
 import pino from "pino";
 
-const isDevelopment = process.env["NODE_ENV"] !== "production";
+const isProduction = process.env.NODE_ENV === "production";
 
 export const logger = pino({
-  level: process.env["LOG_LEVEL"] || "info",
-  serializers: {
-    err: pino.stdSerializers.err,
-    req: pino.stdSerializers.req,
-    res: pino.stdSerializers.res,
-  },
-  // In development, use pretty print formatting
-  ...(isDevelopment && {
+  level: process.env.LOG_LEVEL || "info",
+  // Use pretty output in development via pino-pretty
+  ...(isProduction ? {} : {
     transport: {
       target: "pino-pretty",
       options: {
@@ -27,9 +23,6 @@ export const logger = pino({
   }),
 });
 
-/**
- * Create a child logger with additional context
- */
 export function createChildLogger(context: string) {
   return logger.child({ context });
 }

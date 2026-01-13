@@ -47,12 +47,23 @@ jobs:
 
       - name: Generate test coverage summary
         if: always()
-        run: bun test --coverage | tee coverage.txt
+        run: bun test --coverage 2>&1 | tee coverage.txt | tail -20
+        env:
+          NODE_ENV: test
+          GOOGLE_SHEET_ID: test-sheet-id
+          GOOGLE_CREDENTIALS_EMAIL: test@example.com
+          GOOGLE_PRIVATE_KEY: "-----BEGIN PRIVATE KEY-----\ntest\n-----END PRIVATE KEY-----\n"
+          ALLOWED_ORIGINS: "*"
+          DISCORD_WEBHOOK_URL: ""
+          PORT: "3011"
+          HOST: "0.0.0.0"
+          CLOUDFLARE_TURNSTILE_SECRET_KEY: 1x0000000000000000000000000000000AA
+          CLOUDFLARE_TURNSTILE_SITE_KEY: 1x0000000000000000000000000000000AA
 
       - name: Upload coverage to summary
         if: always()
         run: |
           echo "## Test Coverage 📊" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
-          tail -n 20 coverage.txt >> $GITHUB_STEP_SUMMARY
+          cat coverage.txt >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY

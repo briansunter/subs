@@ -1,0 +1,53 @@
+# Release Please configuration for semantic releases
+# See https://github.com/google-github-actions/release-please-action
+
+branches:
+  - main
+  - master
+
+release-type: simple
+
+# Version component to bump (major, minor, patch)
+# Using simple release type which bumps based on conventional commits
+bump-minor-pre-major: true
+bump-patch-for-minor-pre-major: true
+
+# Changelog configuration
+changelog-sections:
+  - title: Features
+    emoji: ✨
+    collapse: false
+  - title: Bug Fixes
+    emoji: 🐛
+    collapse: false
+  - title: Changes
+    emoji: ♻️
+    collapse: false
+  - title: Tests
+    emoji: ✅
+    collapse: true
+  - title: Docs
+    emoji: 📝
+    collapse: true
+  - title: Chore
+    emoji: 🔧
+    collapse: true
+  - title: CI/CD
+    emoji: 🚀
+    collapse: true
+
+# Exclude certain commit types from release notes
+exclude-commit-types:
+  - chore
+  - ci
+  - docs
+  - test
+  - style
+  - refactor
+  - perf
+
+# Release tag format
+tag-name: "v${version}"
+
+# Don't include extra files in the release
+include-v-in-tag: true

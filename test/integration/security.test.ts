@@ -134,7 +134,7 @@ describe("Security Tests - Integration", () => {
 
       const xssPayloads = [
         { "<script>alert('xss')</script>": "value" },
-        { "key": "<img src=x onerror=alert('xss')>" },
+        { key: "<img src=x onerror=alert('xss')>" },
         { "<svg onload=alert('xss')>": "test" },
         { "javascript:alert('xss')": "value" },
       ];
@@ -224,7 +224,7 @@ describe("Security Tests - Integration", () => {
       await startServer();
 
       // Way beyond valid email length
-      const tooLongEmail = "a".repeat(1000) + "@example.com";
+      const tooLongEmail = `${"a".repeat(1000)}@example.com`;
 
       const response = await fetch(`${BASE_URL}/api/signup`, {
         method: "POST",

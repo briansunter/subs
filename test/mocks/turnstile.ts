@@ -124,7 +124,10 @@ export const mockTurnstileService = {
    * @param secretKey - The Turnstile secret key
    * @returns Verification result
    */
-  verifyTurnstileToken: async (token: string, secretKey: string): Promise<TurnstileVerifyResponse> => {
+  verifyTurnstileToken: async (
+    token: string,
+    secretKey: string,
+  ): Promise<TurnstileVerifyResponse> => {
     // Track the call
     mockCalls.push({
       token,

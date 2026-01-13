@@ -1,4 +1,4 @@
-# Bun Fastify Email Signup API
+# subs
 
 ![CI/CD](https://img.shields.io/github/actions/workflow/status/briansunter/subs/test.yml?branch=main)
 ![Version](https://img.shields.io/npm/v/subs)
@@ -6,18 +6,43 @@
 ![Bun](https://img.shields.io/badge/Bun-%3E%3D1.0.0-black)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.0.0-blue)
 
-A high-performance email signup API built with Bun, Fastify, Google Sheets, Discord webhooks, and TypeScript.
+Production-ready email signup API with invisible bot protection. Built with Bun, Fastify, Google Sheets, Discord webhooks, and TypeScript.
+
+## Why subs?
+
+**Invisible Protection** 🛡️
+- Cloudflare Turnstile blocks 99% of spam
+- No CAPTCHAs or friction for users
+- Privacy-first with zero tracking
+
+**Flexible Embedding** 🔌
+- 4+ options: iframe, inline, direct POST, or JavaScript SDK
+- Works on any website or platform
+- Multi-tab Google Sheets organization
+
+**Production-Ready** 📊
+- Prometheus metrics built-in
+- Structured JSON logging
+- Health check and stats endpoints
+
+**Type-Safe** ✅
+- Zod validation with compile-time guarantees
+- 100% type-safe API
+- Automatic duplicate prevention
 
 ## Features
 
-- **Email Signup** - Validate and store email signups in Google Sheets
-- **Zod Validation** - Type-safe request validation with Zod
-- **Google Sheets Integration** - Store signups in configurable sheet tabs
-- **Discord Notifications** - Optional webhook notifications for new signups
-- **CORS Support** - Allow requests from any origin
-- **Iframe Embedding** - Embed the signup form on any website
-- **TypeScript Logging** - Structured logging with Pino
-- **Docker Support** - Multi-stage Dockerfile for production
+- **Smart Email Collection** - Validate, deduplicate, and store emails with automatic sync
+- **Zod Validation** - 100% type-safe request validation with compile-time guarantees
+- **Google Sheets Integration** - Store signups in configurable sheet tabs with automatic creation
+- **Discord Notifications** - Real-time webhook alerts for new signups and errors
+- **Cloudflare Turnstile** - Invisible bot protection that blocks 99% of spam
+- **Flexible Embedding** - iframe, inline, direct POST, or JavaScript SDK
+- **Prometheus Metrics** - Production observability with comprehensive metrics
+- **Duplicate Prevention** - Automatic deduplication across all sheet tabs
+- **CORS Support** - Configurable origins for secure cross-origin requests
+- **TypeScript Logging** - Structured logging with Pino for production debugging
+- **Docker Support** - Multi-stage build with optimized standalone binary
 - **Comprehensive Tests** - Unit and integration tests with high coverage
 
 ## Documentation

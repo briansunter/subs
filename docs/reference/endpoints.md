@@ -18,6 +18,8 @@ https://your-domain.com        # Production
 | `POST` | `/api/signup/bulk` | Bulk signup (up to 100 emails) |
 | `GET` | `/api/stats` | Get signup statistics |
 | `GET` | `/api/health` | Health check |
+| `GET` | `/metrics` | Prometheus metrics |
+| `GET` | `/api/config` | Public configuration |
 
 ---
 
@@ -372,3 +374,81 @@ await fastify.register(rateLimit, {
 Configure CORS origins via `ALLOWED_ORIGINS` environment variable.
 
 See [Configuration](/reference/configuration) for details.
+
+---
+
+## GET `/metrics`
+
+Prometheus metrics endpoint for monitoring and observability.
+
+### Request
+
+```http
+GET /metrics
+```
+
+### Response
+
+**Success (200)**
+
+Returns Prometheus text format metrics:
+
+```
+# HELP http_request_duration_seconds Duration of HTTP requests in seconds
+# TYPE http_request_duration_seconds histogram
+http_request_duration_seconds_bucket{le="0.005",method="GET",route="/api/health",status_code="200"} 1
+
+# HELP signup_requests_total Total number of signup requests
+# TYPE signup_requests_total counter
+signup_requests_total{endpoint="/api/signup",status="success"} 42
+```
+
+### Example
+
+```bash
+curl http://localhost:3000/metrics
+```
+
+See [Prometheus Metrics](/guide/prometheus) for detailed metrics documentation and querying examples.
+
+---
+
+## GET `/api/config`
+
+Public configuration endpoint for frontend clients.
+
+### Request
+
+```http
+GET /api/config
+```
+
+### Response
+
+**Success (200)**
+
+```json
+{
+  "turnstileSiteKey": "0x4AAAAAAAxxxxxxxx",
+  "turnstileEnabled": true,
+  "defaultSheetTab": "Sheet1"
+}
+```
+
+### Response Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `turnstileSiteKey` | string \| null | Cloudflare Turnstile site key (null if not configured) |
+| `turnstileEnabled` | boolean | Whether Turnstile is enabled |
+| `defaultSheetTab` | string | Default sheet tab name |
+
+### Example
+
+```bash
+curl http://localhost:3000/api/config
+```
+
+### Usage
+
+This endpoint is used by frontend clients to fetch public configuration values, such as the Turnstile site key for CAPTCHA widgets. It does not expose sensitive values like secret keys.

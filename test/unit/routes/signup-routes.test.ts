@@ -4,12 +4,12 @@
  */
 
 import { beforeEach, describe, expect, test } from "bun:test";
-import Fastify from "fastify";
 import type { FastifyInstance } from "fastify";
+import Fastify from "fastify";
+import type { SignupContext } from "../../../src/routes/handlers";
+import { signupRoutes } from "../../../src/routes/signup";
 import { mockDiscordService } from "../../mocks/discord";
 import { mockSheetsService } from "../../mocks/sheets";
-import { signupRoutes } from "../../../src/routes/signup";
-import type { SignupContext } from "../../../src/routes/handlers";
 
 describe("Signup Routes - Unit Tests", () => {
   let fastify: FastifyInstance;
@@ -39,13 +39,16 @@ describe("Signup Routes - Unit Tests", () => {
 
     // Create Fastify instance and register routes with /api prefix
     fastify = Fastify({ logger: false });
-    await fastify.register(async function (fastify) {
-      await signupRoutes(fastify, { context: mockContext });
-      // Add custom test route within the same plugin so it shares the error handler
-      fastify.get("/test-error", async () => {
-        throw new Error("Unexpected error");
-      });
-    }, { prefix: "/api" });
+    await fastify.register(
+      async (fastify) => {
+        await signupRoutes(fastify, { context: mockContext });
+        // Add custom test route within the same plugin so it shares the error handler
+        fastify.get("/test-error", async () => {
+          throw new Error("Unexpected error");
+        });
+      },
+      { prefix: "/api" },
+    );
 
     await fastify.ready();
   });
@@ -391,10 +394,7 @@ describe("Signup Routes - Unit Tests", () => {
         method: "POST",
         url: "/api/signup/bulk",
         payload: {
-          signups: [
-            { email: "user1@example.com" },
-            { email: "user2@example.com" },
-          ],
+          signups: [{ email: "user1@example.com" }, { email: "user2@example.com" }],
         },
       });
 
@@ -470,10 +470,7 @@ describe("Signup Routes - Unit Tests", () => {
         method: "POST",
         url: "/api/signup/bulk",
         payload: {
-          signups: [
-            { email: "user1@example.com" },
-            { email: "user2@example.com" },
-          ],
+          signups: [{ email: "user1@example.com" }, { email: "user2@example.com" }],
         },
       });
 
@@ -490,10 +487,7 @@ describe("Signup Routes - Unit Tests", () => {
         method: "POST",
         url: "/api/signup/bulk",
         payload: {
-          signups: [
-            { email: "valid@example.com" },
-            { email: "invalid-email" },
-          ],
+          signups: [{ email: "valid@example.com" }, { email: "invalid-email" }],
         },
       });
 
@@ -533,9 +527,7 @@ describe("Signup Routes - Unit Tests", () => {
         method: "POST",
         url: "/api/signup/bulk",
         payload: {
-          signups: [
-            { email: "user1@example.com", sheetTab: "CustomTab" },
-          ],
+          signups: [{ email: "user1@example.com", sheetTab: "CustomTab" }],
         },
       });
 

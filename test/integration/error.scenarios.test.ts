@@ -159,7 +159,7 @@ describe("Error Scenarios - Integration Tests", () => {
 
       // Create an email that's at the boundary of valid length
       const localPart = "a".repeat(64);
-      const domain = "b".repeat(63) + ".com";
+      const domain = `${"b".repeat(63)}.com`;
       const email = `${localPart}@${domain}`;
 
       const response = await fetch(`${BASE_URL}/api/signup`, {

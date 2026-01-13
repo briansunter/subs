@@ -33,7 +33,8 @@ describe("Configuration - Unit Tests", () => {
       // Set minimal required env vars
       process.env["GOOGLE_SHEET_ID"] = "test-sheet-123";
       process.env["GOOGLE_CREDENTIALS_EMAIL"] = "test@example.com";
-      process.env["GOOGLE_PRIVATE_KEY"] = "-----BEGIN PRIVATE KEY-----\ntest-key\n-----END PRIVATE KEY-----";
+      process.env["GOOGLE_PRIVATE_KEY"] =
+        "-----BEGIN PRIVATE KEY-----\ntest-key\n-----END PRIVATE KEY-----";
 
       const config = getConfig();
 
@@ -80,7 +81,8 @@ describe("Configuration - Unit Tests", () => {
     test("should replace \\n in private key with actual newlines", () => {
       process.env["GOOGLE_SHEET_ID"] = "test";
       process.env["GOOGLE_CREDENTIALS_EMAIL"] = "test@example.com";
-      process.env["GOOGLE_PRIVATE_KEY"] = "-----BEGIN PRIVATE KEY-----\\ntest\\nkey\\n-----END PRIVATE KEY-----";
+      process.env["GOOGLE_PRIVATE_KEY"] =
+        "-----BEGIN PRIVATE KEY-----\\ntest\\nkey\\n-----END PRIVATE KEY-----";
 
       const config = getConfig();
 
@@ -112,10 +114,7 @@ describe("Configuration - Unit Tests", () => {
 
       const config = getConfig();
 
-      expect(config.allowedOrigins).toEqual([
-        "https://example.com",
-        "https://test.com",
-      ]);
+      expect(config.allowedOrigins).toEqual(["https://example.com", "https://test.com"]);
     });
 
     test("should default ALLOWED_ORIGINS to * when not provided", () => {

@@ -13,6 +13,12 @@ import {
   signupSchema,
 } from "../schemas/signup";
 import { sendErrorNotification, sendSignupNotification } from "../services/discord";
+import {
+  recordDiscordWebhook,
+  recordSheetsRequest,
+  recordSignup,
+  recordTurnstileVerification,
+} from "../services/metrics";
 import { appendSignup, emailExists, getSignupStats } from "../services/sheets";
 import { verifyTurnstileToken } from "../services/turnstile";
 import { createChildLogger } from "../utils/logger";
@@ -89,8 +95,13 @@ async function validateTurnstileToken(
     };
   }
 
+  const startTime = Date.now();
+
   // Verify the token with Cloudflare
   const result = await ctx.turnstile.verifyTurnstileToken(token, ctx.config.turnstileSecretKey);
+
+  const duration = (Date.now() - startTime) / 1000;
+  recordTurnstileVerification(result.success, duration);
 
   if (!result.success) {
     return {
@@ -109,6 +120,9 @@ async function validateTurnstileToken(
  * Handle basic signup
  */
 export async function handleSignup(data: SignupInput, ctx: SignupContext): Promise<HandlerResult> {
+  const startTime = Date.now();
+  let _success = false;
+
   try {
     // Validate input with Zod
     const validationResult = signupSchema.safeParse(data);
@@ -129,10 +143,12 @@ export async function handleSignup(data: SignupInput, ctx: SignupContext): Promi
     }
 
     // Check if email already exists
+    const sheetsStartTime = Date.now();
     const exists = await ctx.sheets.emailExists(
       validationResult.data.email,
       validationResult.data.sheetTab,
     );
+    recordSheetsRequest("emailExists", true, (Date.now() - sheetsStartTime) / 1000);
 
     if (exists) {
       return {
@@ -143,6 +159,7 @@ export async function handleSignup(data: SignupInput, ctx: SignupContext): Promi
     }
 
     // Store in Google Sheets
+    const appendStartTime = Date.now();
     await ctx.sheets.appendSignup({
       email: validationResult.data.email,
       timestamp: new Date().toISOString(),
@@ -151,6 +168,7 @@ export async function handleSignup(data: SignupInput, ctx: SignupContext): Promi
         ? JSON.stringify(validationResult.data.metadata)
         : undefined,
     });
+    recordSheetsRequest("appendSignup", true, (Date.now() - appendStartTime) / 1000);
 
     // Send Discord notification (non-blocking, errors ignored)
     ctx.discord
@@ -161,11 +179,19 @@ export async function handleSignup(data: SignupInput, ctx: SignupContext): Promi
         },
         ctx.config.discordWebhookUrl,
       )
+      .then(() => {
+        recordDiscordWebhook("signup", true);
+      })
       .catch((err) => {
+        recordDiscordWebhook("signup", false);
         logger.error({ error: err }, "Failed to send Discord notification");
       });
 
     logger.info({ email: validationResult.data.email }, "New signup processed");
+
+    _success = true;
+    const duration = (Date.now() - startTime) / 1000;
+    recordSignup("/api/signup", true, duration);
 
     return {
       success: true,
@@ -174,6 +200,9 @@ export async function handleSignup(data: SignupInput, ctx: SignupContext): Promi
     };
   } catch (error) {
     logger.error({ error }, "Signup failed");
+
+    const duration = (Date.now() - startTime) / 1000;
+    recordSignup("/api/signup", false, duration);
 
     // Send error notification to Discord (non-blocking)
     ctx.discord
@@ -184,7 +213,11 @@ export async function handleSignup(data: SignupInput, ctx: SignupContext): Promi
         },
         ctx.config.discordWebhookUrl,
       )
+      .then(() => {
+        recordDiscordWebhook("error", true);
+      })
       .catch((err) => {
+        recordDiscordWebhook("error", false);
         logger.error({ error: err }, "Failed to send error notification");
       });
 
@@ -203,6 +236,9 @@ export async function handleExtendedSignup(
   data: ExtendedSignupInput,
   ctx: SignupContext,
 ): Promise<HandlerResult> {
+  const startTime = Date.now();
+  let _success = false;
+
   try {
     // Validate input with Zod
     const validationResult = extendedSignupSchema.safeParse(data);
@@ -223,10 +259,12 @@ export async function handleExtendedSignup(
     }
 
     // Check if email already exists
+    const sheetsStartTime = Date.now();
     const exists = await ctx.sheets.emailExists(
       validationResult.data.email,
       validationResult.data.sheetTab,
     );
+    recordSheetsRequest("emailExists", true, (Date.now() - sheetsStartTime) / 1000);
 
     if (exists) {
       return {
@@ -237,6 +275,7 @@ export async function handleExtendedSignup(
     }
 
     // Store in Google Sheets
+    const appendStartTime = Date.now();
     await ctx.sheets.appendSignup({
       email: validationResult.data.email,
       timestamp: new Date().toISOString(),
@@ -248,6 +287,7 @@ export async function handleExtendedSignup(
         ? JSON.stringify(validationResult.data.metadata)
         : undefined,
     });
+    recordSheetsRequest("appendSignup", true, (Date.now() - appendStartTime) / 1000);
 
     // Send Discord notification (non-blocking)
     ctx.discord
@@ -261,11 +301,19 @@ export async function handleExtendedSignup(
         },
         ctx.config.discordWebhookUrl,
       )
+      .then(() => {
+        recordDiscordWebhook("signup", true);
+      })
       .catch((err) => {
+        recordDiscordWebhook("signup", false);
         logger.error({ error: err }, "Failed to send Discord notification");
       });
 
     logger.info({ email: validationResult.data.email }, "Extended signup processed");
+
+    _success = true;
+    const duration = (Date.now() - startTime) / 1000;
+    recordSignup("/api/signup/extended", true, duration);
 
     return {
       success: true,
@@ -274,6 +322,9 @@ export async function handleExtendedSignup(
     };
   } catch (error) {
     logger.error({ error }, "Extended signup failed");
+
+    const duration = (Date.now() - startTime) / 1000;
+    recordSignup("/api/signup/extended", false, duration);
 
     // Send error notification to Discord (non-blocking)
     ctx.discord
@@ -284,7 +335,11 @@ export async function handleExtendedSignup(
         },
         ctx.config.discordWebhookUrl,
       )
+      .then(() => {
+        recordDiscordWebhook("error", true);
+      })
       .catch((err) => {
+        recordDiscordWebhook("error", false);
         logger.error({ error: err }, "Failed to send error notification");
       });
 
@@ -303,6 +358,8 @@ export async function handleBulkSignup(
   data: BulkSignupInput,
   ctx: SignupContext,
 ): Promise<HandlerResult> {
+  const startTime = Date.now();
+
   try {
     // Validate input with Zod
     const validationResult = bulkSignupSchema.safeParse(data);
@@ -326,7 +383,9 @@ export async function handleBulkSignup(
     for (const signup of validationResult.data.signups) {
       try {
         // Check if email already exists
+        const sheetsStartTime = Date.now();
         const exists = await ctx.sheets.emailExists(signup.email, signup.sheetTab);
+        recordSheetsRequest("emailExists", true, (Date.now() - sheetsStartTime) / 1000);
 
         if (exists) {
           results.duplicates++;
@@ -334,12 +393,14 @@ export async function handleBulkSignup(
         }
 
         // Store in Google Sheets
+        const appendStartTime = Date.now();
         await ctx.sheets.appendSignup({
           email: signup.email,
           timestamp: new Date().toISOString(),
           sheetTab: signup.sheetTab || ctx.config.defaultSheetTab,
           metadata: signup.metadata ? JSON.stringify(signup.metadata) : undefined,
         });
+        recordSheetsRequest("appendSignup", true, (Date.now() - appendStartTime) / 1000);
 
         results.success++;
       } catch (error) {
@@ -353,6 +414,9 @@ export async function handleBulkSignup(
       "Bulk signup processed",
     );
 
+    const duration = (Date.now() - startTime) / 1000;
+    recordSignup("/api/signup/bulk", true, duration);
+
     return {
       success: true,
       statusCode: 200,
@@ -361,6 +425,9 @@ export async function handleBulkSignup(
     };
   } catch (error) {
     logger.error({ error }, "Bulk signup failed");
+
+    const duration = (Date.now() - startTime) / 1000;
+    recordSignup("/api/signup/bulk", false, duration);
 
     // Send error notification to Discord (non-blocking)
     ctx.discord
@@ -371,7 +438,11 @@ export async function handleBulkSignup(
         },
         ctx.config.discordWebhookUrl,
       )
+      .then(() => {
+        recordDiscordWebhook("error", true);
+      })
       .catch((err) => {
+        recordDiscordWebhook("error", false);
         logger.error({ error: err }, "Failed to send error notification");
       });
 
@@ -390,8 +461,13 @@ export async function handleGetStats(
   sheetTab: string | undefined,
   ctx: SignupContext,
 ): Promise<HandlerResult> {
+  const startTime = Date.now();
+
   try {
+    const sheetsStartTime = Date.now();
     const stats = await ctx.sheets.getSignupStats(sheetTab);
+    recordSheetsRequest("getSignupStats", true, (Date.now() - sheetsStartTime) / 1000);
+
     return {
       success: true,
       statusCode: 200,
@@ -399,6 +475,10 @@ export async function handleGetStats(
     };
   } catch (error) {
     logger.error({ error }, "Failed to get stats");
+
+    const duration = (Date.now() - startTime) / 1000;
+    recordSheetsRequest("getSignupStats", false, duration);
+
     return {
       success: false,
       statusCode: 500,

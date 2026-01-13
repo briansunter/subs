@@ -267,7 +267,8 @@ describe("Turnstile Service - Unit Tests", () => {
 
   describe("verifyTurnstileToken - Network Errors", () => {
     test("should handle network connection error", async () => {
-      global.fetch = (() => Promise.reject(new Error("Network connection failed"))) as unknown as typeof fetch;
+      global.fetch = (() =>
+        Promise.reject(new Error("Network connection failed"))) as unknown as typeof fetch;
 
       const result = await verifyTurnstileToken(mockToken, mockSecret);
 
@@ -277,7 +278,8 @@ describe("Turnstile Service - Unit Tests", () => {
     });
 
     test("should handle timeout error", async () => {
-      global.fetch = (() => Promise.reject(new Error("Request timeout"))) as unknown as typeof fetch;
+      global.fetch = (() =>
+        Promise.reject(new Error("Request timeout"))) as unknown as typeof fetch;
 
       const result = await verifyTurnstileToken(mockToken, mockSecret);
 

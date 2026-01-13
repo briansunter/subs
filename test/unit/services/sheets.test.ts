@@ -6,7 +6,8 @@
 // Set up environment before any imports
 process.env["GOOGLE_SHEET_ID"] = "test-sheet-id";
 process.env["GOOGLE_CREDENTIALS_EMAIL"] = "test@example.com";
-process.env["GOOGLE_PRIVATE_KEY"] = "-----BEGIN PRIVATE KEY-----\ntest\n-----END PRIVATE KEY-----\n";
+process.env["GOOGLE_PRIVATE_KEY"] =
+  "-----BEGIN PRIVATE KEY-----\ntest\n-----END PRIVATE KEY-----\n";
 process.env["NODE_ENV"] = "test";
 process.env["DEFAULT_SHEET_TAB"] = "Sheet1";
 
@@ -23,10 +24,7 @@ const mockValuesAppend = mock(() => Promise.resolve({ data: {} }));
 const mockSpreadsheetsGet = mock(() =>
   Promise.resolve({
     data: {
-      sheets: [
-        { properties: { title: "Sheet1" } },
-        { properties: { title: "Sheet2" } },
-      ],
+      sheets: [{ properties: { title: "Sheet1" } }, { properties: { title: "Sheet2" } }],
     },
   }),
 );
@@ -99,10 +97,7 @@ describe("Sheets Service - Real Implementation Tests", () => {
     mockValuesAppend.mockResolvedValue({ data: {} });
     mockSpreadsheetsGet.mockResolvedValue({
       data: {
-        sheets: [
-          { properties: { title: "Sheet1" } },
-          { properties: { title: "Sheet2" } },
-        ],
+        sheets: [{ properties: { title: "Sheet1" } }, { properties: { title: "Sheet2" } }],
       },
     });
     mockSpreadsheetsBatchUpdate.mockResolvedValue({ data: {} });
@@ -272,7 +267,7 @@ describe("Sheets Service - Real Implementation Tests", () => {
 
       const callArgs = mockValuesAppend.mock.calls[0];
       expect(callArgs).toBeDefined();
-      expect(callArgs![0].requestBody.values[0][2]).toBe("api"); // Default source
+      expect(callArgs?.[0].requestBody.values[0][2]).toBe("api"); // Default source
     });
 
     test("should handle empty tags array", async () => {
@@ -296,7 +291,7 @@ describe("Sheets Service - Real Implementation Tests", () => {
 
       const callArgs = mockValuesAppend.mock.calls[0];
       expect(callArgs).toBeDefined();
-      expect(callArgs![0].requestBody.values[0][4]).toBe(""); // Empty tags
+      expect(callArgs?.[0].requestBody.values[0][4]).toBe(""); // Empty tags
     });
 
     test("should stringify metadata object", async () => {
@@ -320,7 +315,7 @@ describe("Sheets Service - Real Implementation Tests", () => {
 
       const callArgs = mockValuesAppend.mock.calls[0];
       expect(callArgs).toBeDefined();
-      expect(callArgs![0].requestBody.values[0][5]).toBe('{"key":"value"}');
+      expect(callArgs?.[0].requestBody.values[0][5]).toBe('{"key":"value"}');
     });
 
     test("should handle empty metadata", async () => {
@@ -343,7 +338,7 @@ describe("Sheets Service - Real Implementation Tests", () => {
 
       const callArgs = mockValuesAppend.mock.calls[0];
       expect(callArgs).toBeDefined();
-      expect(callArgs![0].requestBody.values[0][5]).toBe(""); // Empty metadata
+      expect(callArgs?.[0].requestBody.values[0][5]).toBe(""); // Empty metadata
     });
 
     test("should throw error on append failure", async () => {
@@ -425,10 +420,7 @@ describe("Sheets Service - Real Implementation Tests", () => {
 
       mockValuesGet.mockResolvedValue({
         data: {
-          values: [
-            ["Email"],
-            ["other@example.com"],
-          ],
+          values: [["Email"], ["other@example.com"]],
         },
       });
 
@@ -440,10 +432,7 @@ describe("Sheets Service - Real Implementation Tests", () => {
     test("should search all tabs when sheetTab not provided", async () => {
       mockSpreadsheetsGet.mockResolvedValue({
         data: {
-          sheets: [
-            { properties: { title: "Sheet1" } },
-            { properties: { title: "Sheet2" } },
-          ],
+          sheets: [{ properties: { title: "Sheet1" } }, { properties: { title: "Sheet2" } }],
         },
       });
 
@@ -455,11 +444,10 @@ describe("Sheets Service - Real Implementation Tests", () => {
           return Promise.resolve({
             data: { values: [["Email"], ["other1@example.com"]] },
           });
-        } else {
-          return Promise.resolve({
-            data: { values: [["Email"], ["test@example.com"]] }, // Found here!
-          });
         }
+        return Promise.resolve({
+          data: { values: [["Email"], ["test@example.com"]] }, // Found here!
+        });
       });
 
       const exists = await emailExists("test@example.com");
@@ -472,10 +460,7 @@ describe("Sheets Service - Real Implementation Tests", () => {
     test("should search specific tab when sheetTab provided", async () => {
       mockSpreadsheetsGet.mockResolvedValue({
         data: {
-          sheets: [
-            { properties: { title: "Sheet1" } },
-            { properties: { title: "Sheet2" } },
-          ],
+          sheets: [{ properties: { title: "Sheet1" } }, { properties: { title: "Sheet2" } }],
         },
       });
 
@@ -505,10 +490,7 @@ describe("Sheets Service - Real Implementation Tests", () => {
     test("should count rows across all tabs when no sheetTab", async () => {
       mockSpreadsheetsGet.mockResolvedValue({
         data: {
-          sheets: [
-            { properties: { title: "Sheet1" } },
-            { properties: { title: "Sheet2" } },
-          ],
+          sheets: [{ properties: { title: "Sheet1" } }, { properties: { title: "Sheet2" } }],
         },
       });
 
@@ -520,20 +502,17 @@ describe("Sheets Service - Real Implementation Tests", () => {
           return Promise.resolve({
             data: { values: [["Email"], ["user1@example.com"], ["user2@example.com"]] }, // 2 rows
           });
-        } else if (callCount === 2) {
+        }
+        if (callCount === 2) {
           return Promise.resolve({
             data: { values: [["Email"], ["user3@example.com"]] }, // 1 row
           });
-        } else {
-          return Promise.resolve({
-            data: {
-              sheets: [
-                { properties: { title: "Sheet1" } },
-                { properties: { title: "Sheet2" } },
-              ],
-            },
-          });
         }
+        return Promise.resolve({
+          data: {
+            sheets: [{ properties: { title: "Sheet1" } }, { properties: { title: "Sheet2" } }],
+          },
+        });
       });
 
       const stats = await getSignupStats();
@@ -547,10 +526,7 @@ describe("Sheets Service - Real Implementation Tests", () => {
     test("should count rows in specific tab when sheetTab provided", async () => {
       mockSpreadsheetsGet.mockResolvedValue({
         data: {
-          sheets: [
-            { properties: { title: "Sheet1" } },
-            { properties: { title: "Sheet2" } },
-          ],
+          sheets: [{ properties: { title: "Sheet1" } }, { properties: { title: "Sheet2" } }],
         },
       });
 

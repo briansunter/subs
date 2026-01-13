@@ -7,8 +7,9 @@ const base = process.env.DOCS_BASE || "/";
 
 export default defineConfig({
   base,
-  title: "Bun Fastify Email Signup API",
-  description: "A high-performance email signup API built with Bun, Fastify, Google Sheets, Discord webhooks, and TypeScript",
+  title: "subs",
+  description:
+    "Production-ready email signup API with invisible bot protection, Google Sheets, and Discord notifications",
 
   // Ignore dead links during build
   ignoreDeadLinks: true,
@@ -32,6 +33,7 @@ export default defineConfig({
           { text: "Google Sheets Setup", link: "/guide/google-sheets" },
           { text: "Discord Setup", link: "/guide/discord" },
           { text: "Cloudflare Turnstile", link: "/guide/turnstile" },
+          { text: "Prometheus Metrics", link: "/guide/prometheus" },
           { text: "HTML Form Integration", link: "/guide/integration" },
           { text: "API Reference", link: "/guide/api" },
           { text: "Deployment", link: "/guide/deployment" },
@@ -48,9 +50,7 @@ export default defineConfig({
       },
     ],
 
-    socialLinks: [
-      { icon: "github", link: "https://github.com/briansunter/subs" },
-    ],
+    socialLinks: [{ icon: "github", link: "https://github.com/briansunter/subs" }],
 
     footer: {
       message: "Released under the MIT License.",

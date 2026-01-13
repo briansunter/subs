@@ -9,6 +9,7 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import { bulkSignupSchema, extendedSignupSchema, signupSchema } from "../schemas/signup";
+import { recordHttpRequest, register } from "../services/metrics";
 import {
   createDefaultContext,
   handleBulkSignup,
@@ -33,12 +34,21 @@ export interface SignupRoutesOptions {
 /**
  * Register signup routes
  */
-export async function signupRoutes(
-  fastify: FastifyInstance,
-  options: SignupRoutesOptions = {},
-) {
+export async function signupRoutes(fastify: FastifyInstance, options: SignupRoutesOptions = {}) {
   // Create context with real services, or use provided context for testing
   const context = options.context ?? createDefaultContext();
+
+  // Add hooks to track HTTP request metrics
+  fastify.addHook("onRequest", async (request, _reply) => {
+    (request as { startTime?: number }).startTime = Date.now();
+  });
+
+  fastify.addHook("onResponse", async (request, reply) => {
+    const duration =
+      (Date.now() - ((request as { startTime?: number }).startTime || Date.now())) / 1000;
+    const route = request.routeOptions?.url || request.url || "unknown";
+    recordHttpRequest(request.method, route, reply.statusCode, duration);
+  });
 
   // Set up Zod type provider for validation and serialization
   fastify.setValidatorCompiler(validatorCompiler);
@@ -88,6 +98,14 @@ export async function signupRoutes(
       turnstileEnabled: !!turnstileSiteKey,
       defaultSheetTab,
     });
+  });
+
+  /**
+   * Prometheus metrics endpoint
+   * Exposes metrics for Prometheus scraping
+   */
+  fastify.get("/metrics", async (_request, reply) => {
+    reply.type("text/plain").send(await register.metrics());
   });
 
   /**

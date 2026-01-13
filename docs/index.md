@@ -2,9 +2,9 @@
 layout: home
 
 hero:
-  name: "Bun Fastify Email Signup API"
-  text: "High-performance email signup API with Google Sheets and Discord"
-  tagline: "Built with Bun, Fastify, TypeScript, and Zod validation"
+  name: "subs"
+  text: "Production-ready email signup API with invisible bot protection"
+  tagline: "Ship in minutes with Google Sheets, Discord notifications, and Cloudflare Turnstile"
   actions:
     - theme: brand
       text: Get Started
@@ -17,24 +17,24 @@ hero:
       link: /guide/api
 
 features:
-  - title: Email Signup
-    details: Validate and store email signups in Google Sheets with automatic deduplication and multi-tab support.
-  - title: Google Sheets Integration
-    details: Store signups directly in your Google Sheets with configurable tabs and automatic header creation.
-  - title: Discord Notifications
-    details: Optional real-time webhook notifications for new signups and errors, keeping your team informed.
-  - title: Type-Safe Validation
-    details: Built with Zod for compile-time type safety and runtime validation of all API requests.
-  - title: Multiple Embedding Options
-    details: Embed forms on any website using iframes, inline forms, direct POST, or JavaScript fetch.
-  - title: Production Ready
-    details: Docker support, comprehensive tests, structured logging, and security best practices included.
-  - title: High Performance
-    details: Built on Bun runtime and Fastify framework for maximum performance and minimal resource usage.
-  - title: CORS Support
-    details: Configurable CORS origins for cross-origin requests and flexible form embedding.
-  - title: Bulk Operations
-    details: Support for bulk email signups up to 100 emails at once with detailed success/error reporting.
+  - title: 🛡️ Invisible Protection
+    details: "Cloudflare Turnstile blocks 99% of spam without CAPTCHAs or user friction. Privacy-first with zero tracking."
+  - title: 📧 Smart Email Collection
+    details: "Validate, deduplicate, and store emails with automatic sync. Multi-tab support for organizing signups by source."
+  - title: 📊 Production-Ready
+    details: "Prometheus metrics, structured JSON logging, health check endpoints, and Docker support built-in."
+  - title: ✅ Type-Safe Validation
+    details: "100% type-safe API with Zod validation and compile-time guarantees. Catch errors before runtime."
+  - title: 🔌 Flexible Embedding
+    details: "Embed forms anywhere - iframe, inline, direct POST, or JavaScript SDK. Works on any platform."
+  - title: 📢 Real-Time Notifications
+    details: "Optional Discord webhook notifications for new signups, bulk completions, and errors."
+  - title: 📑 Multi-Tab Organization
+    details: "Separate signups by source with configurable Google Sheets tabs. Automatic tab creation included."
+  - title: 🚫 Duplicate Prevention
+    details: "Automatic deduplication across all sheet tabs prevents duplicate email registrations."
+  - title: 🧪 Comprehensive Testing
+    details: "Unit and integration tests with high coverage. Mock services for isolated testing."
 ---
 
 ## Quick Start

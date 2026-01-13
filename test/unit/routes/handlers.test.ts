@@ -635,7 +635,7 @@ describe("Route Handlers - Unit Tests", () => {
     test("should handle 254 character email (max valid)", async () => {
       // 254 chars is the maximum valid email length
       const localPart = "a".repeat(64); // Max local part is 64 chars
-      const domain = "b".repeat(63) + ".com"; // Max domain label is 63 chars
+      const domain = `${"b".repeat(63)}.com`; // Max domain label is 63 chars
       const email = `${localPart}@${domain}`;
 
       const result = await handleSignup({ email, sheetTab: "Sheet1" }, mockContext);
@@ -734,10 +734,7 @@ describe("Route Handlers - Unit Tests", () => {
     });
 
     test("should handle unicode characters in email", async () => {
-      const result = await handleSignup(
-        { email: "test@例え.jp", sheetTab: "Sheet1" },
-        mockContext,
-      );
+      const result = await handleSignup({ email: "test@例え.jp", sheetTab: "Sheet1" }, mockContext);
 
       // Email validator accepts unicode, so this should pass validation
       expect(result.success).toBe(true);
@@ -971,9 +968,7 @@ describe("Route Handlers - Unit Tests", () => {
 
       const result = await handleBulkSignup(
         {
-          signups: [
-            { email: "test@example.com", sheetTab: "Sheet1" },
-          ],
+          signups: [{ email: "test@example.com", sheetTab: "Sheet1" }],
         },
         mockContext,
       );
@@ -991,9 +986,7 @@ describe("Route Handlers - Unit Tests", () => {
 
       const result = await handleBulkSignup(
         {
-          signups: [
-            { email: "test@example.com", sheetTab: "Sheet1" },
-          ],
+          signups: [{ email: "test@example.com", sheetTab: "Sheet1" }],
         },
         mockContext,
       );

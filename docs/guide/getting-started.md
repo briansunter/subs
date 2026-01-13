@@ -1,13 +1,26 @@
 # Getting Started
 
-Get your email signup API up and running in minutes.
+Get **subs** up and running in ~5 minutes. You'll have a production-ready email signup API with invisible bot protection, Google Sheets storage, and optional Discord notifications.
+
+## What You're Building
+
+**subs** is a complete email signup solution that:
+
+- 🛡️ Blocks 99% of spam with Cloudflare Turnstile (invisible to users)
+- 📧 Validates, deduplicates, and stores emails in Google Sheets
+- 📊 Tracks metrics with Prometheus out of the box
+- 🔌 Embeds anywhere: iframe, inline, direct POST, or JavaScript SDK
+- 📢 Sends real-time notifications to Discord
+
+**Time to complete**: ~5 minutes
+**Difficulty**: Beginner-friendly
 
 ## Prerequisites
 
 Before you begin, ensure you have:
 
 - **Bun** - Install from [bun.sh](https://bun.sh/)
-- **Google Account** - For Google Sheets integration
+- **Google Account** - For Google Sheets integration (free tier works great)
 - **Code Editor** - VS Code, or any editor of your choice
 - **Terminal** - For running commands
 

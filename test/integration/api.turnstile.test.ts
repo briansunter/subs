@@ -8,10 +8,10 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import {
   clearConfigCache,
   clearTestEnv,
+  DEFAULT_TEST_ENV,
   getTestApp,
   resetTestApp,
   setTestEnv,
-  DEFAULT_TEST_ENV,
 } from "../helpers/test-app";
 
 interface ConfigResponse {
@@ -118,10 +118,7 @@ describe.serial("Turnstile Integration Tests", () => {
       method: "POST",
       url: "/api/signup/bulk",
       payload: {
-        signups: [
-          { email: "bulk1@example.com" },
-          { email: "bulk2@example.com" },
-        ],
+        signups: [{ email: "bulk1@example.com" }, { email: "bulk2@example.com" }],
       },
     });
 

@@ -12,7 +12,11 @@ RUN bun install --frozen-lockfile
 COPY . .
 
 # Compile to standalone binary (includes all dependencies)
-RUN bun build index.ts --compile --outfile ./subs-server
+RUN bun build index.ts \
+  --compile \
+  --minify-whitespace \
+  --minify-syntax \
+  --outfile ./subs-server
 
 # Stage 2: Minimal production runtime
 FROM oven/bun:1 AS release
@@ -24,8 +28,13 @@ COPY --from=builder /app/subs-server ./subs-server
 # Switch to non-root user
 USER bun
 
-# Expose port
+# Expose port (for API, health checks, and Prometheus metrics)
 EXPOSE 3000
+
+# Labels for Prometheus service discovery
+LABEL prometheus.io/scrape="true"
+LABEL prometheus.io/port="3000"
+LABEL prometheus.io.path="/metrics"
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s \

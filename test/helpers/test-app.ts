@@ -5,9 +5,12 @@
 
 import cors from "@fastify/cors";
 import Fastify from "fastify";
-import { config } from "../../src/config";
+import { clearConfigCache as _clearConfigCache, config } from "../../src/config";
 import { signupRoutes } from "../../src/routes/signup";
 import "../../src/schemas/signup";
+
+// Re-export clearConfigCache for convenience
+export { _clearConfigCache as clearConfigCache };
 
 let testApp: ReturnType<typeof Fastify> | null = null;
 
@@ -108,4 +111,6 @@ export const DEFAULT_TEST_ENV = {
   DISCORD_WEBHOOK_URL: "",
   PORT: "3011",
   HOST: "0.0.0.0",
+  CLOUDFLARE_TURNSTILE_SECRET_KEY: "1x0000000000000000000000000000000AA",
+  CLOUDFLARE_TURNSTILE_SITE_KEY: "1x0000000000000000000000000000000AA",
 } as const;

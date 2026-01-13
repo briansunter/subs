@@ -3,7 +3,7 @@
  * Extracted from Fastify routes for testability
  */
 
-import { config } from "../config";
+import { getConfig, type SignupConfig } from "../config";
 import {
   type BulkSignupInput,
   bulkSignupSchema,
@@ -14,6 +14,7 @@ import {
 } from "../schemas/signup";
 import { sendErrorNotification, sendSignupNotification } from "../services/discord";
 import { appendSignup, emailExists, getSignupStats } from "../services/sheets";
+import { verifyTurnstileToken } from "../services/turnstile";
 import { createChildLogger } from "../utils/logger";
 
 const logger = createChildLogger("handlers");
@@ -32,23 +33,22 @@ export interface SignupContext {
     sendSignupNotification: typeof sendSignupNotification;
     sendErrorNotification: typeof sendErrorNotification;
   };
-  config: {
-    defaultSheetTab: string;
-    discordWebhookUrl?: string;
+  turnstile: {
+    verifyTurnstileToken: typeof verifyTurnstileToken;
   };
+  config: SignupConfig;
 }
 
 /**
  * Default context with real services
  */
 export function createDefaultContext(): SignupContext {
+  const currentConfig = getConfig();
   return {
     sheets: { appendSignup, emailExists, getSignupStats },
     discord: { sendSignupNotification, sendErrorNotification },
-    config: {
-      defaultSheetTab: config.defaultSheetTab,
-      discordWebhookUrl: config.discordWebhookUrl,
-    },
+    turnstile: { verifyTurnstileToken },
+    config: currentConfig,
   };
 }
 
@@ -62,6 +62,47 @@ export interface HandlerResult {
   error?: string;
   details?: string[];
   data?: unknown;
+}
+
+/**
+ * Validate Turnstile token if configured
+ * @param token - The Turnstile token from request
+ * @param ctx - The signup context
+ * @returns Handler result if validation fails, undefined if validation passes or is not configured
+ */
+async function validateTurnstileToken(
+  token: string | undefined,
+  ctx: SignupContext,
+): Promise<HandlerResult | undefined> {
+  // If Turnstile is not configured, skip validation
+  if (!ctx.config.turnstileSecretKey) {
+    return undefined;
+  }
+
+  // If Turnstile is configured but no token provided, return error
+  if (!token) {
+    return {
+      success: false,
+      statusCode: 400,
+      error: "Turnstile verification failed",
+      details: ["turnstileToken: Token is required"],
+    };
+  }
+
+  // Verify the token with Cloudflare
+  const result = await ctx.turnstile.verifyTurnstileToken(token, ctx.config.turnstileSecretKey);
+
+  if (!result.success) {
+    return {
+      success: false,
+      statusCode: 400,
+      error: "Turnstile verification failed",
+      details: [`turnstileToken: ${result.error || "Invalid or expired token"}`],
+    };
+  }
+
+  // Token is valid, continue
+  return undefined;
 }
 
 /**
@@ -79,6 +120,12 @@ export async function handleSignup(data: SignupInput, ctx: SignupContext): Promi
         error: "Validation failed",
         details: errors,
       };
+    }
+
+    // Validate Turnstile token if configured
+    const turnstileResult = await validateTurnstileToken(validationResult.data.turnstileToken, ctx);
+    if (turnstileResult) {
+      return turnstileResult;
     }
 
     // Check if email already exists
@@ -167,6 +214,12 @@ export async function handleExtendedSignup(
         error: "Validation failed",
         details: errors,
       };
+    }
+
+    // Validate Turnstile token if configured
+    const turnstileResult = await validateTurnstileToken(validationResult.data.turnstileToken, ctx);
+    if (turnstileResult) {
+      return turnstileResult;
     }
 
     // Check if email already exists

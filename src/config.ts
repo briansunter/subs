@@ -24,6 +24,10 @@ const envSchema = z.object({
   // Discord (optional)
   DISCORD_WEBHOOK_URL: z.string().optional(),
 
+  // Cloudflare Turnstile (optional)
+  CLOUDFLARE_TURNSTILE_SECRET_KEY: z.string().optional(),
+  CLOUDFLARE_TURNSTILE_SITE_KEY: z.string().optional(),
+
   // CORS
   ALLOWED_ORIGINS: z
     .string()
@@ -49,6 +53,10 @@ export interface SignupConfig {
   // Discord
   discordWebhookUrl?: string;
 
+  // Cloudflare Turnstile
+  turnstileSecretKey?: string;
+  turnstileSiteKey?: string;
+
   // CORS
   allowedOrigins: string[];
 }
@@ -68,6 +76,8 @@ function loadEnv(): SignupConfig {
     googlePrivateKey: formattedPrivateKey,
     defaultSheetTab: env.DEFAULT_SHEET_TAB,
     discordWebhookUrl: env.DISCORD_WEBHOOK_URL,
+    turnstileSecretKey: env.CLOUDFLARE_TURNSTILE_SECRET_KEY,
+    turnstileSiteKey: env.CLOUDFLARE_TURNSTILE_SITE_KEY,
     allowedOrigins: env.ALLOWED_ORIGINS,
   };
 }

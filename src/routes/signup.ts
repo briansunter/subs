@@ -78,6 +78,19 @@ export async function signupRoutes(
   });
 
   /**
+   * Get public configuration
+   * Returns safe public values like Turnstile site key (not secret keys)
+   */
+  fastifyZod.get("/config", async (_request, reply) => {
+    const { turnstileSiteKey, defaultSheetTab } = context.config;
+    return reply.send({
+      turnstileSiteKey: turnstileSiteKey ?? null,
+      turnstileEnabled: !!turnstileSiteKey,
+      defaultSheetTab,
+    });
+  });
+
+  /**
    * Get signup statistics
    */
   fastifyZod.get(

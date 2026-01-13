@@ -25,8 +25,8 @@ COPY --from=install /temp/prod/node_modules node_modules
 COPY . .
 
 # Create non-root user for security
-RUN addgroup --system --gid 1001 bun && \
-    adduser --system --uid 1001 --gid 1001 bun && \
+RUN groupadd --system --gid 1001 bun && \
+    useradd --system --uid 1001 --gid 1001 bun && \
     chown -R bun:bun /app
 
 # Switch to non-root user

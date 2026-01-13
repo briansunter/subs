@@ -1,36 +1,16 @@
-# Multi-stage Dockerfile for Bun Fastify Signup API
+# Simple Dockerfile for Bun Fastify Signup API
+FROM oven/bun:1
 
-# Stage 1: Build stage - Install dependencies and build TypeScript
-FROM oven/bun:1 AS base
 WORKDIR /app
 
 # Install dependencies
-FROM base AS install
-RUN mkdir -p /temp/dev
-COPY package.json bun.lock /temp/dev/
-RUN cd /temp/dev && bun install --frozen-lockfile
-
-RUN mkdir -p /temp/prod
-COPY package.json bun.lock /temp/prod/
-RUN cd /temp/prod && bun install --frozen-lockfile --production
-
-# Stage 2: Production stage
-FROM base AS release
-WORKDIR /app
-
-# Copy production dependencies
-COPY --from=install /temp/prod/node_modules node_modules
+COPY package.json bun.lock ./
+RUN bun install --frozen-lockfile --production
 
 # Copy source code
 COPY . .
 
-# Create non-root user for security (if not exists)
-RUN id -u bun >/dev/null 2>&1 || \
-    (groupadd --system --gid 1001 bun && \
-    useradd --system --uid 1001 --gid 1001 bun) && \
-    chown -R bun:bun /app
-
-# Switch to non-root user
+# Switch to non-root user (already exists in base image)
 USER bun
 
 # Expose port

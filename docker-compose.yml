@@ -1,0 +1,34 @@
+version: '3.9'
+
+services:
+  signup-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: signup-api
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - HOST=0.0.0.0
+      - NODE_ENV=production
+      - ALLOWED_ORIGINS=*
+      - GOOGLE_SHEET_ID=${GOOGLE_SHEET_ID}
+      - GOOGLE_CREDENTIALS_EMAIL=${GOOGLE_CREDENTIALS_EMAIL}
+      - GOOGLE_PRIVATE_KEY=${GOOGLE_PRIVATE_KEY}
+      - DEFAULT_SHEET_TAB=${DEFAULT_SHEET_TAB:-Sheet1}
+      - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "bun", "--eval", "fetch('http://localhost:3000/api/health').then(r => process.exit(r.ok ? 0 : 1))"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 40s
+    networks:
+      - signup-network
+
+networks:
+  signup-network:
+    driver: bridge

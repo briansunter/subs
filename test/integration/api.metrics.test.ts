@@ -86,6 +86,7 @@ describe("Metrics Endpoint Integration Tests", () => {
     test("should include signup metrics after signup request", async () => {
       await injectPost("/api/signup", {
         email: "test@example.com",
+        turnstileToken: "valid-test-token",
       });
 
       const response = await app.inject({
@@ -117,6 +118,7 @@ describe("Metrics Endpoint Integration Tests", () => {
     test("should record POST request metrics", async () => {
       await injectPost("/api/signup", {
         email: "test@example.com",
+        turnstileToken: "valid-test-token",
       });
 
       const response = await app.inject({
@@ -160,9 +162,12 @@ describe("Metrics Endpoint Integration Tests", () => {
 
   describe("Signup Metrics Recording", () => {
     test("should record successful signup", async () => {
+      // Configure Turnstile mock to return success
+      mockTurnstileService.setSuccess();
+
       const signupResponse = await injectPost("/api/signup", {
         email: "test@example.com",
-        turnstileToken: "valid-test-token", // Valid test token
+        turnstileToken: "valid-test-token",
       });
 
       // First check if signup succeeded
@@ -187,6 +192,7 @@ describe("Metrics Endpoint Integration Tests", () => {
 
       await injectPost("/api/signup", {
         email: "test@example.com",
+        turnstileToken: "valid-test-token",
       });
 
       const response = await app.inject({
@@ -202,6 +208,7 @@ describe("Metrics Endpoint Integration Tests", () => {
     test("should record signup duration", async () => {
       await injectPost("/api/signup", {
         email: "test@example.com",
+        turnstileToken: "valid-test-token",
       });
 
       const response = await app.inject({
@@ -219,6 +226,7 @@ describe("Metrics Endpoint Integration Tests", () => {
     test("should record successful sheets API calls", async () => {
       await injectPost("/api/signup", {
         email: "test@example.com",
+        turnstileToken: "valid-test-token",
       });
 
       const response = await app.inject({
@@ -238,6 +246,7 @@ describe("Metrics Endpoint Integration Tests", () => {
 
       await injectPost("/api/signup", {
         email: "test@example.com",
+        turnstileToken: "valid-test-token",
       });
 
       const response = await app.inject({
@@ -253,6 +262,7 @@ describe("Metrics Endpoint Integration Tests", () => {
     test("should record sheets API duration", async () => {
       await injectPost("/api/signup", {
         email: "test@example.com",
+        turnstileToken: "valid-test-token",
       });
 
       const response = await app.inject({
@@ -270,6 +280,7 @@ describe("Metrics Endpoint Integration Tests", () => {
     test("should record successful Discord webhook", async () => {
       await injectPost("/api/signup", {
         email: "test@example.com",
+        turnstileToken: "valid-test-token",
       });
 
       const response = await app.inject({
@@ -289,6 +300,7 @@ describe("Metrics Endpoint Integration Tests", () => {
 
       await injectPost("/api/signup", {
         email: "test@example.com",
+        turnstileToken: "valid-test-token",
       });
 
       const response = await app.inject({
@@ -308,6 +320,7 @@ describe("Metrics Endpoint Integration Tests", () => {
 
       await injectPost("/api/signup", {
         email: "test@example.com",
+        turnstileToken: "valid-test-token",
       });
 
       const response = await app.inject({
@@ -345,6 +358,7 @@ describe("Metrics Endpoint Integration Tests", () => {
 
       await injectPost("/api/signup", {
         email: "test@example.com",
+        turnstileToken: "valid-test-token",
         turnstileToken: "invalid-token",
       });
 

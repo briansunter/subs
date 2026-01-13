@@ -3,19 +3,19 @@
 name: Deploy Docs
 
 on:
-  # Trigger on push to main branch
+  # Trigger on push to master branch
   push:
     branches:
-      - main
+      - master
     paths:
       - 'docs/**'
       - '.github/workflows/deploy-docs.yml'
       - 'package.json'
 
-  # Trigger on pull request to main branch
+  # Trigger on pull request to master branch
   pull_request:
     branches:
-      - main
+      - master
     paths:
       - 'docs/**'
       - '.github/workflows/deploy-docs.yml'

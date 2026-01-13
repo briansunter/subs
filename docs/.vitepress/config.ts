@@ -31,6 +31,7 @@ export default defineConfig({
           { text: "Getting Started", link: "/guide/getting-started" },
           { text: "Google Sheets Setup", link: "/guide/google-sheets" },
           { text: "Discord Setup", link: "/guide/discord" },
+          { text: "Cloudflare Turnstile", link: "/guide/turnstile" },
           { text: "HTML Form Integration", link: "/guide/integration" },
           { text: "API Reference", link: "/guide/api" },
           { text: "Deployment", link: "/guide/deployment" },

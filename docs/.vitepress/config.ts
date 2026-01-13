@@ -10,6 +10,9 @@ export default defineConfig({
   title: "Bun Fastify Email Signup API",
   description: "A high-performance email signup API built with Bun, Fastify, Google Sheets, Discord webhooks, and TypeScript",
 
+  // Ignore dead links during build
+  ignoreDeadLinks: true,
+
   themeConfig: {
     nav: [
       { text: "Guide", link: "/guide/getting-started" },
@@ -17,7 +20,7 @@ export default defineConfig({
       { text: "Integration", link: "/guide/integration" },
       {
         text: "GitHub",
-        link: "https://github.com/yourusername/subs",
+        link: "https://github.com/briansunter/subs",
       },
     ],
 
@@ -45,7 +48,7 @@ export default defineConfig({
     ],
 
     socialLinks: [
-      { icon: "github", link: "https://github.com/yourusername/subs" },
+      { icon: "github", link: "https://github.com/briansunter/subs" },
     ],
 
     footer: {

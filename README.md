@@ -1,5 +1,11 @@
 # Bun Fastify Email Signup API
 
+![CI/CD](https://img.shields.io/github/actions/workflow/status/briansunter/subs/test.yml?branch=main)
+![Version](https://img.shields.io/npm/v/subs)
+![License](https://img.shields.io/github/license/briansunter/subs)
+![Bun](https://img.shields.io/badge/Bun-%3E%3D1.0.0-black)
+![TypeScript](https://img.shields.io/badge/TypeScript-5.0.0-blue)
+
 A high-performance email signup API built with Bun, Fastify, Google Sheets, Discord webhooks, and TypeScript.
 
 ## Features
@@ -12,13 +18,25 @@ A high-performance email signup API built with Bun, Fastify, Google Sheets, Disc
 - **Iframe Embedding** - Embed the signup form on any website
 - **TypeScript Logging** - Structured logging with Pino
 - **Docker Support** - Multi-stage Dockerfile for production
+- **Comprehensive Tests** - Unit and integration tests with high coverage
+
+## Documentation
+
+Full documentation is available at **[https://briansunter.github.io/subs](https://briansunter.github.io/subs)**
+
+- **[Getting Started](https://briansunter.github.io/subs/guide/getting-started)** - Quick setup guide
+- **[Google Sheets Setup](https://briansunter.github.io/subs/guide/google-sheets)** - Complete Google Sheets configuration
+- **[Discord Setup](https://briansunter.github.io/subs/guide/discord)** - Configure Discord notifications
+- **[HTML Form Integration](https://briansunter.github.io/subs/guide/integration)** - Embed forms on your website
+- **[API Reference](https://briansunter.github.io/subs/guide/api)** - Complete API documentation
+- **[Deployment](https://briansunter.github.io/subs/guide/deployment)** - Deploy to production
 
 ## Quick Start
 
 ### 1. Clone and Install
 
 ```bash
-git clone <your-repo-url>
+git clone https://github.com/briansunter/subs.git
 cd subs
 bun install
 ```
@@ -37,6 +55,8 @@ Required environment variables:
 - `GOOGLE_PRIVATE_KEY` - Service account private key
 - `ALLOWED_ORIGINS` - Comma-separated list of allowed origins (or `*` for all)
 
+For detailed setup instructions, see the **[Google Sheets Setup Guide](https://briansunter.github.io/subs/guide/google-sheets)**.
+
 ### 3. Set Up Google Sheets
 
 1. Go to [Google Cloud Console](https://console.cloud.google.com/)
@@ -48,6 +68,8 @@ Required environment variables:
    - Download the JSON key file
 5. Share your Google Sheet with the service account email
 6. Copy the credentials to your `.env` file
+
+For a complete step-by-step guide with screenshots, see **[Google Sheets Setup](https://briansunter.github.io/subs/guide/google-sheets)**.
 
 ### 4. Run the Server
 
@@ -114,7 +136,15 @@ curl http://localhost:3000/api/stats?sheetTab=Sheet1
 ### GET `/api/health`
 Health check endpoint
 
-## Embedding the Form
+```bash
+curl http://localhost:3000/api/health
+```
+
+For complete API documentation, see **[API Reference](https://briansunter.github.io/subs/guide/api)**.
+
+## HTML Form Integration
+
+You can integrate the signup form into your website in several ways:
 
 ### Option 1: Iframe Embed
 
@@ -175,6 +205,8 @@ document.getElementById('signup-form').addEventListener('submit', async (e) => {
 </script>
 ```
 
+For more integration examples including React, Vue, and Svelte, see **[HTML Form Integration Guide](https://briansunter.github.io/subs/guide/integration)**.
+
 ### Customizing the Embedded Form
 
 You can customize the form using URL parameters:
@@ -191,13 +223,19 @@ https://your-domain.com/?api=/api/signup/extended&redirect=/thank-you
 The API supports multiple sheet tabs within a single spreadsheet:
 
 1. Create a new Google Sheet
-2. Share it with your service account email
+2. Share it with your service account email (with "Editor" permission)
 3. Use the `sheetTab` parameter to specify which tab to use
 
 The API will automatically:
 - Create tabs if they don't exist
 - Add headers to new tabs
-- Prevent duplicate emails (optional)
+- Track metadata (timestamp, source, tags, etc.)
+
+Each row in your sheet will contain:
+| Email | Timestamp | Source | Name | Tags | Metadata | Sheet Tab |
+|-------|-----------|--------|------|------|----------|-----------|
+
+For detailed Google Sheets setup instructions, see **[Google Sheets Setup Guide](https://briansunter.github.io/subs/guide/google-sheets)**.
 
 ## Discord Notifications
 
@@ -205,13 +243,16 @@ To enable Discord notifications:
 
 1. Create a Discord webhook in your server settings
 2. Add the webhook URL to your `.env`:
-   ```
+   ```bash
    DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/...
    ```
 
 You'll receive notifications for:
-- New signups
+- New signups (with user details)
+- Bulk signup completions
 - Errors
+
+For complete Discord setup instructions, see **[Discord Setup Guide](https://briansunter.github.io/subs/guide/discord)**.
 
 ## Docker Deployment
 
@@ -246,26 +287,68 @@ docker run -d \
   signup-api
 ```
 
+For more deployment options (VPS, Render, Railway, Fly.io), see **[Deployment Guide](https://briansunter.github.io/subs/guide/deployment)**.
+
 ## Project Structure
 
 ```
 subs/
 ├── src/
-│   ├── config.ts           # Environment configuration
+│   ├── config.ts              # Environment configuration
 │   ├── routes/
-│   │   └── signup.ts       # API routes
+│   │   ├── signup.ts          # API routes
+│   │   └── handlers.ts        # Business logic
 │   ├── schemas/
-│   │   └── signup.ts       # Zod validation schemas
+│   │   └── signup.ts          # Zod validation schemas
 │   ├── services/
-│   │   ├── sheets.ts       # Google Sheets service
-│   │   └── discord.ts      # Discord webhook service
+│   │   ├── sheets.ts          # Google Sheets integration
+│   │   └── discord.ts         # Discord webhook service
 │   └── utils/
-│       └── logger.ts       # Logging utility
-├── index.ts                # Server entry point
-├── Dockerfile              # Multi-stage Docker build
-├── docker-compose.yml      # Docker Compose configuration
-├── .env.example            # Environment variables template
+│       └── logger.ts          # Pino logging
+├── test/                      # Comprehensive tests
+│   ├── unit/                  # Unit tests
+│   ├── integration/           # Integration tests
+│   ├── mocks/                 # Mock services
+│   └── helpers/               # Test helpers
+├── docs/                      # VitePress documentation
+├── index.ts                   # Server entry point
+├── Dockerfile                 # Multi-stage Docker build
+├── docker-compose.yml         # Docker Compose configuration
+├── .env.example               # Environment variables template
 └── package.json
+```
+
+## Development
+
+### Running Tests
+
+```bash
+# Run all tests
+bun test
+
+# Run unit tests only
+bun test test/unit
+
+# Run integration tests only
+bun test test/integration
+
+# Run tests with coverage
+bun test --coverage
+```
+
+### Code Quality
+
+The project uses [Biome](https://biomejs.dev/) for linting and formatting.
+
+```bash
+# Check all files
+bunx biome check .
+
+# Auto-fix issues
+bunx biome check --write .
+
+# Format files
+bunx biome format --write .
 ```
 
 ## Security Considerations
@@ -276,6 +359,45 @@ subs/
 4. **Service Account** - Keep your Google credentials secure
 5. **HTTPS** - Always use HTTPS in production
 
+For more security best practices, see the **[Deployment Guide](https://briansunter.github.io/subs/guide/deployment#security-best-practices)**.
+
+## Troubleshooting
+
+### Common Issues
+
+**Port already in use**:
+```bash
+# Use a different port
+PORT=3001 bun run dev
+
+# Or kill the process using port 3000
+lsof -ti:3000 | xargs kill -9
+```
+
+**Google Sheets permission errors**:
+- Verify the sheet is shared with the service account email
+- Set permission to "Editor" (not just "Viewer")
+- Wait a few minutes for permissions to propagate
+
+**Discord notifications not appearing**:
+- Verify the `DISCORD_WEBHOOK_URL` is set correctly
+- Test the webhook URL directly with curl
+- Check that the webhook still exists in Discord
+
+For more troubleshooting help, see **[Troubleshooting Guide](https://briansunter.github.io/subs/guide/troubleshooting)**.
+
+## Contributing
+
+Contributions are welcome! Please see **[CONTRIBUTING.md](CONTRIBUTING.md)** for guidelines.
+
 ## License
 
 MIT
+
+## Links
+
+- **Documentation**: https://briansunter.github.io/subs
+- **GitHub**: https://github.com/briansunter/subs
+- **Issues**: https://github.com/briansunter/subs/issues
+- **Bun**: https://bun.sh
+- **Fastify**: https://fastify.dev

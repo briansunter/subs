@@ -11,7 +11,7 @@ hero:
       link: /guide/getting-started
     - theme: alt
       text: View on GitHub
-      link: https://github.com/yourusername/subs
+      link: https://github.com/briansunter/subs
     - theme: alt
       text: API Reference
       link: /guide/api
@@ -41,7 +41,7 @@ features:
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/subs.git
+git clone https://github.com/briansunter/subs.git
 cd subs
 
 # Install dependencies
@@ -134,4 +134,4 @@ subs/
 
 ## License
 
-[MIT](https://github.com/yourusername/subs/blob/main/LICENSE)
+[MIT](https://github.com/briansunter/subs/blob/main/LICENSE)

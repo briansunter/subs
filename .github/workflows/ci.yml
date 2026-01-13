@@ -28,9 +28,22 @@ jobs:
 
       - name: Run Biome linter
         run: bunx biome check .
+        env:
+          NODE_ENV: test
 
       - name: Run tests
         run: bun test
+        env:
+          NODE_ENV: test
+          GOOGLE_SHEET_ID: test-sheet-id
+          GOOGLE_CREDENTIALS_EMAIL: test@example.com
+          GOOGLE_PRIVATE_KEY: "-----BEGIN PRIVATE KEY-----\ntest\n-----END PRIVATE KEY-----\n"
+          ALLOWED_ORIGINS: "*"
+          DISCORD_WEBHOOK_URL: ""
+          PORT: "3011"
+          HOST: "0.0.0.0"
+          CLOUDFLARE_TURNSTILE_SECRET_KEY: 1x0000000000000000000000000000000AA
+          CLOUDFLARE_TURNSTILE_SITE_KEY: 1x0000000000000000000000000000000AA
 
       - name: Generate test coverage summary
         if: always()

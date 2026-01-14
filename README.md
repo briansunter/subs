@@ -1,7 +1,7 @@
 # subs
 
 [![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/briansunter/subs)
-![CI/CD](https://img.shields.io/github/actions/workflow/status/briansunter/subs/test.yml?branch=main)
+![CI](https://img.shields.io/github/actions/workflow/status/briansunter/subs/ci.yml?branch=master)
 ![Version](https://img.shields.io/npm/v/subs)
 ![License](https://img.shields.io/github/license/briansunter/subs)
 ![Bun](https://img.shields.io/badge/Bun-%3E%3D1.0.0-black)

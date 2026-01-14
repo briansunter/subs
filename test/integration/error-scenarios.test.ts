@@ -6,12 +6,12 @@
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import {
-  VALID_TURNSTILE_TOKEN,
   getTestApp,
   mockDiscordService,
   mockSheetsService,
   mockTurnstileService,
   register,
+  VALID_TURNSTILE_TOKEN,
 } from "../helpers/test-app";
 import type { ApiResponse } from "../types";
 

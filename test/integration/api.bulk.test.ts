@@ -87,10 +87,7 @@ describe("Bulk Signup API Integration Tests", () => {
         method: "POST",
         url: "/api/signup/bulk",
         payload: {
-          signups: [
-            { email: "user1@example.com" },
-            { email: "user2@example.com" },
-          ],
+          signups: [{ email: "user1@example.com" }, { email: "user2@example.com" }],
         },
       });
 

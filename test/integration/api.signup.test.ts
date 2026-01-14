@@ -5,12 +5,12 @@
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import {
-  VALID_TURNSTILE_TOKEN,
   getTestApp,
   mockDiscordService,
   mockSheetsService,
   mockTurnstileService,
   register,
+  VALID_TURNSTILE_TOKEN,
 } from "../helpers/test-app";
 import type { ApiResponse } from "../types";
 
@@ -257,10 +257,7 @@ describe("Signup API Integration Tests", () => {
         method: "POST",
         url: "/api/signup/bulk",
         payload: {
-          signups: [
-            { email: "user1@example.com" },
-            { email: "user2@example.com" },
-          ],
+          signups: [{ email: "user1@example.com" }, { email: "user2@example.com" }],
         },
       });
 
@@ -304,10 +301,7 @@ describe("Signup API Integration Tests", () => {
         method: "POST",
         url: "/api/signup/bulk",
         payload: {
-          signups: [
-            { email: "valid@example.com" },
-            { email: "invalid" },
-          ],
+          signups: [{ email: "valid@example.com" }, { email: "invalid" }],
         },
       });
 

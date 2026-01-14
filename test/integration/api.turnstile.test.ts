@@ -5,13 +5,13 @@
  */
 
 import { describe, expect, test } from "bun:test";
+import { clearConfigCache } from "../../src/config";
 import {
   DEFAULT_TEST_ENV,
-  VALID_TURNSTILE_TOKEN,
   getTestApp,
   setTestEnv,
+  VALID_TURNSTILE_TOKEN,
 } from "../helpers/test-app";
-import { clearConfigCache } from "../../src/config";
 import type { ConfigResponse } from "../types";
 
 // Set up environment once for all Turnstile tests
@@ -19,7 +19,6 @@ setTestEnv(DEFAULT_TEST_ENV);
 clearConfigCache();
 
 describe.serial("Turnstile Integration Tests", () => {
-
   test("GET /api/config returns Turnstile configuration", async () => {
     const app = await getTestApp();
     const response = await app.inject({

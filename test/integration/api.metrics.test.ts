@@ -6,11 +6,11 @@
  */
 
 import { beforeEach, describe, expect, test } from "bun:test";
+import { register } from "../../src/services/metrics";
 import { getTestApp } from "../helpers/test-app";
 import { mockDiscordService } from "../mocks/discord";
 import { mockSheetsService } from "../mocks/sheets";
 import { mockTurnstileService } from "../mocks/turnstile";
-import { register } from "../../src/services/metrics";
 
 // Global setup for all tests in this file
 beforeEach(async () => {

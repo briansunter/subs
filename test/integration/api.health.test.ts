@@ -6,10 +6,9 @@
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import {
-  clearConfigCache,
   getTestApp,
-  mockSheetsService,
   mockDiscordService,
+  mockSheetsService,
   mockTurnstileService,
 } from "../helpers/test-app";
 import type { ApiResponse } from "../types";
@@ -137,7 +136,7 @@ describe("Health Check - Rate Limiting (inject)", () => {
     const app = await getTestApp();
 
     const requests = Array.from({ length: 10 }, () =>
-      app.inject({ method: "GET", url: "/api/health" })
+      app.inject({ method: "GET", url: "/api/health" }),
     );
 
     const responses = await Promise.all(requests);

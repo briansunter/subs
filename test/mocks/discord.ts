@@ -72,13 +72,16 @@ export const mockDiscordService = {
     });
   },
 
-  sendSignupNotification: async (data: {
-    email: string;
-    sheetTab: string;
-    name?: string;
-    source?: string;
-    tags?: string[];
-  }, webhookUrl?: string) => {
+  sendSignupNotification: async (
+    data: {
+      email: string;
+      sheetTab: string;
+      name?: string;
+      source?: string;
+      tags?: string[];
+    },
+    webhookUrl?: string,
+  ) => {
     // Skip if webhook URL not configured (mimics production behavior)
     if (!webhookUrl) {
       return;
@@ -127,7 +130,10 @@ export const mockDiscordService = {
     return promise;
   },
 
-  sendErrorNotification: async (data: { message: string; context?: Record<string, unknown> }, webhookUrl?: string) => {
+  sendErrorNotification: async (
+    data: { message: string; context?: Record<string, unknown> },
+    webhookUrl?: string,
+  ) => {
     // Skip if webhook URL not configured (mimics production behavior)
     if (!webhookUrl) {
       return;

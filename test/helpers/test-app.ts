@@ -74,7 +74,6 @@ export async function getTestApp() {
   return fastify;
 }
 
-
 /**
  * Set test environment variables
  */
@@ -114,4 +113,3 @@ export const DEFAULT_TEST_ENV = {
  * From: https://developers.cloudflare.com/turnstile/reference/testing
  */
 export const VALID_TURNSTILE_TOKEN = "1x0000000000000000000000000000000AA";
-

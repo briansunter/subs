@@ -3,3 +3,5 @@
 # Unit tests run sequentially by default
 concurrentTestGlob = ["**/integration/**/*.test.ts"]
 maxConcurrency = 10
+# Preload test setup file to configure environment before any modules load
+preload = "./test/setup.ts"

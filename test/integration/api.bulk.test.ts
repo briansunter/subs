@@ -3,48 +3,47 @@
  * Uses Fastify inject() for super-fast testing without server spawning
  */
 
-import { beforeEach, describe, expect, test } from "bun:test";
-import { clearConfigCache } from "../../src/config";
-import { DEFAULT_TEST_ENV, injectPost, resetTestApp, setTestEnv } from "../helpers/test-app";
-
-// Type helper for API responses
-interface ApiResponse {
-  success?: boolean;
-  error?: string;
-  message?: string;
-  details?: string[];
-  statusCode?: number;
-  data?: {
-    success?: number;
-    failed?: number;
-    duplicates?: number;
-    errors?: string[];
-  };
-}
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import {
+  getTestApp,
+  mockDiscordService,
+  mockSheetsService,
+  mockTurnstileService,
+  register,
+} from "../helpers/test-app";
+import type { BulkApiResponse } from "../types";
 
 describe("Bulk Signup API Integration Tests", () => {
   beforeEach(async () => {
-    // Set test environment
-    setTestEnv(DEFAULT_TEST_ENV);
+    // Reset all mock services
+    register.resetMetrics();
+    mockSheetsService.reset();
+    mockDiscordService.reset();
+    mockTurnstileService.reset();
+  });
 
-    // Clear config cache to pick up new env vars
-    clearConfigCache();
-
-    // Reset test app
-    resetTestApp();
+  afterEach(async () => {
+    // Wait for any pending Discord notifications
+    await mockDiscordService.waitForPendingNotifications();
   });
 
   describe("POST /api/signup/bulk - Success Cases", () => {
     test("should process multiple signups successfully", async () => {
-      const response = await injectPost("/api/signup/bulk", {
-        signups: [
-          { email: "user1@example.com", sheetTab: "Sheet1" },
-          { email: "user2@example.com", sheetTab: "Sheet1" },
-          { email: "user3@example.com", sheetTab: "Sheet1" },
-        ],
+      const app = await getTestApp();
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/signup/bulk",
+        payload: {
+          signups: [
+            { email: "user1@example.com", sheetTab: "Sheet1" },
+            { email: "user2@example.com", sheetTab: "Sheet1" },
+            { email: "user3@example.com", sheetTab: "Sheet1" },
+          ],
+        },
       });
 
-      const data = (await response.json()) as ApiResponse;
+      const data = response.json() as BulkApiResponse;
 
       // Will fail on sheets auth with test credentials
       expect([200, 500]).toContain(response.statusCode);
@@ -64,51 +63,78 @@ describe("Bulk Signup API Integration Tests", () => {
     });
 
     test("should handle signups with different sheet tabs", async () => {
-      const response = await injectPost("/api/signup/bulk", {
-        signups: [
-          { email: "user1@example.com", sheetTab: "Sheet1" },
-          { email: "user2@example.com", sheetTab: "Sheet2" },
-          { email: "user3@example.com", sheetTab: "Sheet3" },
-        ],
+      const app = await getTestApp();
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/signup/bulk",
+        payload: {
+          signups: [
+            { email: "user1@example.com", sheetTab: "Sheet1" },
+            { email: "user2@example.com", sheetTab: "Sheet2" },
+            { email: "user3@example.com", sheetTab: "Sheet3" },
+          ],
+        },
       });
 
       expect([200, 500]).toContain(response.statusCode);
     });
 
     test("should handle signups with default sheet tab", async () => {
-      const response = await injectPost("/api/signup/bulk", {
-        signups: [{ email: "user1@example.com" }, { email: "user2@example.com" }],
+      const app = await getTestApp();
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/signup/bulk",
+        payload: {
+          signups: [
+            { email: "user1@example.com" },
+            { email: "user2@example.com" },
+          ],
+        },
       });
 
       expect([200, 500]).toContain(response.statusCode);
     });
 
     test("should process signups with metadata", async () => {
-      const response = await injectPost("/api/signup/bulk", {
-        signups: [
-          {
-            email: "user1@example.com",
-            sheetTab: "Sheet1",
-            metadata: { source: "test", referrer: "google" },
-          },
-          {
-            email: "user2@example.com",
-            sheetTab: "Sheet1",
-            metadata: { source: "test", referrer: "direct" },
-          },
-        ],
+      const app = await getTestApp();
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/signup/bulk",
+        payload: {
+          signups: [
+            {
+              email: "user1@example.com",
+              sheetTab: "Sheet1",
+              metadata: { source: "test", referrer: "google" },
+            },
+            {
+              email: "user2@example.com",
+              sheetTab: "Sheet1",
+              metadata: { source: "test", referrer: "direct" },
+            },
+          ],
+        },
       });
 
       expect([200, 500]).toContain(response.statusCode);
     });
 
     test("should handle exactly 100 signups (maximum allowed)", async () => {
+      const app = await getTestApp();
+
       const signups = Array.from({ length: 100 }, (_, i) => ({
         email: `user${i}@example.com`,
         sheetTab: "Sheet1",
       }));
 
-      const response = await injectPost("/api/signup/bulk", { signups });
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/signup/bulk",
+        payload: { signups },
+      });
 
       expect([200, 500]).toContain(response.statusCode);
     });
@@ -116,66 +142,102 @@ describe("Bulk Signup API Integration Tests", () => {
 
   describe("POST /api/signup/bulk - Validation Errors", () => {
     test("should reject empty signups array", async () => {
-      const response = await injectPost("/api/signup/bulk", {
-        signups: [],
+      const app = await getTestApp();
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/signup/bulk",
+        payload: {
+          signups: [],
+        },
       });
 
       expect(response.statusCode).toBe(400);
-      const data = (await response.json()) as ApiResponse;
+      const data = response.json() as BulkApiResponse;
       expect(data.success).toBe(false);
       expect(data.error).toContain("Validation failed");
     });
 
     test("should reject more than 100 signups", async () => {
+      const app = await getTestApp();
+
       const signups = Array.from({ length: 101 }, (_, i) => ({
         email: `user${i}@example.com`,
         sheetTab: "Sheet1",
       }));
 
-      const response = await injectPost("/api/signup/bulk", { signups });
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/signup/bulk",
+        payload: { signups },
+      });
 
       expect(response.statusCode).toBe(400);
-      const data = (await response.json()) as ApiResponse;
+      const data = response.json() as BulkApiResponse;
       expect(data.success).toBe(false);
       expect(data.error).toContain("Validation failed");
     });
 
     test("should reject invalid email format", async () => {
-      const response = await injectPost("/api/signup/bulk", {
-        signups: [{ email: "invalid-email", sheetTab: "Sheet1" }],
+      const app = await getTestApp();
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/signup/bulk",
+        payload: {
+          signups: [{ email: "invalid-email", sheetTab: "Sheet1" }],
+        },
       });
 
       expect(response.statusCode).toBe(400);
-      const data = (await response.json()) as ApiResponse;
+      const data = response.json() as BulkApiResponse;
       expect(data.success).toBe(false);
       expect(data.details).toBeDefined();
     });
 
     test("should reject missing signups field", async () => {
-      const response = await injectPost("/api/signup/bulk", {});
+      const app = await getTestApp();
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/signup/bulk",
+        payload: {},
+      });
 
       expect(response.statusCode).toBe(400);
-      const data = (await response.json()) as ApiResponse;
+      const data = response.json() as BulkApiResponse;
       expect(data.success).toBe(false);
     });
 
     test("should reject signups array with non-object items", async () => {
-      const response = await injectPost("/api/signup/bulk", {
-        signups: ["not-an-object", "also-not-an-object"],
+      const app = await getTestApp();
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/signup/bulk",
+        payload: {
+          signups: ["not-an-object", "also-not-an-object"],
+        },
       });
 
       expect(response.statusCode).toBe(400);
-      const data = (await response.json()) as ApiResponse;
+      const data = response.json() as BulkApiResponse;
       expect(data.success).toBe(false);
     });
 
     test("should reject missing email field", async () => {
-      const response = await injectPost("/api/signup/bulk", {
-        signups: [{ sheetTab: "Sheet1" }],
+      const app = await getTestApp();
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/signup/bulk",
+        payload: {
+          signups: [{ sheetTab: "Sheet1" }],
+        },
       });
 
       expect(response.statusCode).toBe(400);
-      const data = (await response.json()) as ApiResponse;
+      const data = response.json() as BulkApiResponse;
       expect(data.success).toBe(false);
       expect(data.details).toBeDefined();
     });
@@ -185,12 +247,18 @@ describe("Bulk Signup API Integration Tests", () => {
     test("should handle all signups being duplicates", async () => {
       // This test would need a mock to properly simulate duplicates
       // For now, we test that the endpoint handles the request structure
-      const response = await injectPost("/api/signup/bulk", {
-        signups: [
-          { email: "duplicate@example.com", sheetTab: "Sheet1" },
-          { email: "duplicate@example.com", sheetTab: "Sheet1" },
-          { email: "duplicate@example.com", sheetTab: "Sheet1" },
-        ],
+      const app = await getTestApp();
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/signup/bulk",
+        payload: {
+          signups: [
+            { email: "duplicate@example.com", sheetTab: "Sheet1" },
+            { email: "duplicate@example.com", sheetTab: "Sheet1" },
+            { email: "duplicate@example.com", sheetTab: "Sheet1" },
+          ],
+        },
       });
 
       // Should process the request (even if sheets operations fail with test creds)
@@ -198,30 +266,48 @@ describe("Bulk Signup API Integration Tests", () => {
     });
 
     test("should handle single signup", async () => {
-      const response = await injectPost("/api/signup/bulk", {
-        signups: [{ email: "single@example.com", sheetTab: "Sheet1" }],
+      const app = await getTestApp();
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/signup/bulk",
+        payload: {
+          signups: [{ email: "single@example.com", sheetTab: "Sheet1" }],
+        },
       });
 
       expect([200, 500]).toContain(response.statusCode);
     });
 
     test("should handle signups with null/undefined values", async () => {
-      const response = await injectPost("/api/signup/bulk", {
-        signups: [
-          {
-            email: "user1@example.com",
-            sheetTab: null as unknown as string,
-          },
-        ],
+      const app = await getTestApp();
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/signup/bulk",
+        payload: {
+          signups: [
+            {
+              email: "user1@example.com",
+              sheetTab: null as unknown as string,
+            },
+          ],
+        },
       });
 
       expect(response.statusCode).toBe(400);
     });
 
     test("should handle very long email addresses", async () => {
+      const app = await getTestApp();
+
       const longEmail = `a${"very".repeat(100)}long@example.com`;
-      const response = await injectPost("/api/signup/bulk", {
-        signups: [{ email: longEmail, sheetTab: "Sheet1" }],
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/signup/bulk",
+        payload: {
+          signups: [{ email: longEmail, sheetTab: "Sheet1" }],
+        },
       });
 
       // Zod email validation should catch this
@@ -231,14 +317,20 @@ describe("Bulk Signup API Integration Tests", () => {
 
   describe("POST /api/signup/bulk - Response Format", () => {
     test("should return correct JSON structure", async () => {
-      const response = await injectPost("/api/signup/bulk", {
-        signups: [
-          { email: "user1@example.com", sheetTab: "Sheet1" },
-          { email: "user2@example.com", sheetTab: "Sheet1" },
-        ],
+      const app = await getTestApp();
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/signup/bulk",
+        payload: {
+          signups: [
+            { email: "user1@example.com", sheetTab: "Sheet1" },
+            { email: "user2@example.com", sheetTab: "Sheet1" },
+          ],
+        },
       });
 
-      const data = (await response.json()) as ApiResponse;
+      const data = response.json() as BulkApiResponse;
 
       // Check response structure
       if (response.statusCode === 200) {
@@ -256,15 +348,21 @@ describe("Bulk Signup API Integration Tests", () => {
     });
 
     test("should include accurate counts in response data", async () => {
-      const response = await injectPost("/api/signup/bulk", {
-        signups: [
-          { email: "user1@example.com", sheetTab: "Sheet1" },
-          { email: "user2@example.com", sheetTab: "Sheet1" },
-          { email: "user3@example.com", sheetTab: "Sheet1" },
-        ],
+      const app = await getTestApp();
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/signup/bulk",
+        payload: {
+          signups: [
+            { email: "user1@example.com", sheetTab: "Sheet1" },
+            { email: "user2@example.com", sheetTab: "Sheet1" },
+            { email: "user3@example.com", sheetTab: "Sheet1" },
+          ],
+        },
       });
 
-      const data = (await response.json()) as ApiResponse;
+      const data = response.json() as BulkApiResponse;
 
       if (response.statusCode === 200) {
         expect(typeof data.data?.success).toBe("number");
@@ -280,14 +378,20 @@ describe("Bulk Signup API Integration Tests", () => {
     });
 
     test("should aggregate errors from failed signups", async () => {
-      const response = await injectPost("/api/signup/bulk", {
-        signups: [
-          { email: "invalid-email", sheetTab: "Sheet1" },
-          { email: "also-invalid", sheetTab: "Sheet1" },
-        ],
+      const app = await getTestApp();
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/signup/bulk",
+        payload: {
+          signups: [
+            { email: "invalid-email", sheetTab: "Sheet1" },
+            { email: "also-invalid", sheetTab: "Sheet1" },
+          ],
+        },
       });
 
-      const data = (await response.json()) as ApiResponse;
+      const data = response.json() as BulkApiResponse;
 
       // Should have validation errors for invalid emails
       expect(response.statusCode).toBe(400);
@@ -297,13 +401,19 @@ describe("Bulk Signup API Integration Tests", () => {
 
   describe("POST /api/signup/bulk - Performance", () => {
     test("should handle bulk request within reasonable time", async () => {
+      const app = await getTestApp();
+
       const signups = Array.from({ length: 50 }, (_, i) => ({
         email: `user${i}@example.com`,
         sheetTab: "Sheet1",
       }));
 
       const startTime = Date.now();
-      const response = await injectPost("/api/signup/bulk", { signups });
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/signup/bulk",
+        payload: { signups },
+      });
       const duration = Date.now() - startTime;
 
       // Should complete within 5 seconds (even with test credentials causing auth failures)

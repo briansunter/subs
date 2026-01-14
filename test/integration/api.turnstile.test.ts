@@ -4,49 +4,21 @@
  * Uses Cloudflare test keys which always pass: 1x0000000000000000000000000000000AA
  */
 
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import {
-  clearConfigCache,
-  clearTestEnv,
   DEFAULT_TEST_ENV,
+  VALID_TURNSTILE_TOKEN,
   getTestApp,
-  resetTestApp,
   setTestEnv,
 } from "../helpers/test-app";
+import { clearConfigCache } from "../../src/config";
+import type { ConfigResponse } from "../types";
 
-interface ConfigResponse {
-  turnstileSiteKey?: string | null;
-  turnstileEnabled: boolean;
-  defaultSheetTab: string;
-}
+// Set up environment once for all Turnstile tests
+setTestEnv(DEFAULT_TEST_ENV);
+clearConfigCache();
 
 describe.serial("Turnstile Integration Tests", () => {
-  const TURNSTILE_TEST_ALWAYS_PASS = "1x0000000000000000000000000000000AA";
-
-  beforeEach(() => {
-    // Set up test environment with Turnstile enabled
-    setTestEnv(DEFAULT_TEST_ENV);
-    // Clear config cache so fresh env vars are loaded
-    clearConfigCache();
-    // Reset cached test app
-    resetTestApp();
-  });
-
-  afterEach(() => {
-    // Clean up environment
-    clearTestEnv([
-      "NODE_ENV",
-      "GOOGLE_SHEET_ID",
-      "GOOGLE_CREDENTIALS_EMAIL",
-      "GOOGLE_PRIVATE_KEY",
-      "ALLOWED_ORIGINS",
-      "DISCORD_WEBHOOK_URL",
-      "PORT",
-      "HOST",
-      "CLOUDFLARE_TURNSTILE_SECRET_KEY",
-      "CLOUDFLARE_TURNSTILE_SITE_KEY",
-    ]);
-  });
 
   test("GET /api/config returns Turnstile configuration", async () => {
     const app = await getTestApp();
@@ -69,7 +41,7 @@ describe.serial("Turnstile Integration Tests", () => {
       url: "/api/signup",
       payload: {
         email: "turnstile-test@example.com",
-        turnstileToken: TURNSTILE_TEST_ALWAYS_PASS,
+        turnstileToken: VALID_TURNSTILE_TOKEN,
       },
     });
 
@@ -103,7 +75,7 @@ describe.serial("Turnstile Integration Tests", () => {
       payload: {
         email: "extended-turnstile@example.com",
         name: "Test User",
-        turnstileToken: TURNSTILE_TEST_ALWAYS_PASS,
+        turnstileToken: VALID_TURNSTILE_TOKEN,
       },
     });
 

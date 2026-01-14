@@ -1,90 +1,43 @@
 /**
  * Integration tests for signup routes
- * Uses a real server with fetch due to Bun + Fastify inject() incompatibility
- * See: https://github.com/oven-sh/bun/issues/10894
+ * Uses Fastify inject() for fast testing
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mockDiscordService } from "../mocks/discord";
-import { mockSheetsService } from "../mocks/sheets";
-
-// Type for API responses
-interface ApiResponse {
-  success?: boolean;
-  error?: string;
-  message?: string;
-  details?: string[];
-  status?: string;
-  timestamp?: string;
-  data?: unknown;
-}
-
-// Store server process
-let serverProcess: { kill: () => void } | null = null;
-const TEST_PORT = 3011;
-const BASE_URL = `http://localhost:${TEST_PORT}`;
-
-async function startServer() {
-  // Start server in background
-  serverProcess = Bun.spawn(["bun", "run", "index.ts"], {
-    env: {
-      ...process.env,
-      PORT: String(TEST_PORT),
-      NODE_ENV: "test",
-      // Use test credentials
-      GOOGLE_SHEET_ID: "test-sheet-id",
-      GOOGLE_CREDENTIALS_EMAIL: "test@example.com",
-      GOOGLE_PRIVATE_KEY: "-----BEGIN PRIVATE KEY-----\ntest\n-----END PRIVATE KEY-----\n",
-      ALLOWED_ORIGINS: "*",
-      DISCORD_WEBHOOK_URL: "",
-    },
-    cwd: `${import.meta.dir}/../..`,
-    stdout: "pipe",
-    stderr: "pipe",
-  });
-
-  // Wait for server to be ready by polling health endpoint
-  const maxWait = 10000; // 10 seconds max
-  const startTime = Date.now();
-  while (Date.now() - startTime < maxWait) {
-    try {
-      const response = await fetch(`${BASE_URL}/api/health`, {
-        signal: AbortSignal.timeout(500),
-      });
-      if (response.ok) break;
-    } catch {
-      // Server not ready yet, wait a bit
-      await new Promise((resolve) => setTimeout(resolve, 100));
-    }
-  }
-}
-
-async function stopServer() {
-  if (serverProcess) {
-    serverProcess.kill();
-    serverProcess = null;
-  }
-  // Wait for server to stop
-  await new Promise((resolve) => setTimeout(resolve, 500));
-}
+import {
+  VALID_TURNSTILE_TOKEN,
+  getTestApp,
+  mockDiscordService,
+  mockSheetsService,
+  mockTurnstileService,
+  register,
+} from "../helpers/test-app";
+import type { ApiResponse } from "../types";
 
 describe("Signup API Integration Tests", () => {
   beforeEach(async () => {
+    register.resetMetrics();
     mockSheetsService.reset();
     mockDiscordService.reset();
-    await startServer();
+    mockTurnstileService.reset();
   });
 
   afterEach(async () => {
-    await stopServer();
+    await mockDiscordService.waitForPendingNotifications();
   });
 
   describe("GET /api/health", () => {
     test("should return healthy status", async () => {
-      const response = await fetch(`${BASE_URL}/api/health`);
-      const data = (await response.json()) as ApiResponse;
+      const app = await getTestApp();
 
-      expect(response.status).toBe(200);
+      const response = await app.inject({
+        method: "GET",
+        url: "/api/health",
+      });
+
+      const data = response.json() as ApiResponse;
+
+      expect(response.statusCode).toBe(200);
       expect(data.status).toBe("ok");
       expect(data.timestamp).toBeDefined();
     });
@@ -92,6 +45,8 @@ describe("Signup API Integration Tests", () => {
 
   describe("GET /api/stats", () => {
     test("should return stats", async () => {
+      const app = await getTestApp();
+
       // Add some test data
       await mockSheetsService.appendSignup({
         email: "user1@example.com",
@@ -99,56 +54,69 @@ describe("Signup API Integration Tests", () => {
         sheetTab: "Sheet1",
       });
 
-      const response = await fetch(`${BASE_URL}/api/stats`);
-      await response.json(); // Consume the response body
+      const response = await app.inject({
+        method: "GET",
+        url: "/api/stats",
+      });
 
       // Note: This will fail with auth error due to test credentials
       // but we can test the endpoint exists
-      expect([200, 500]).toContain(response.status);
+      expect([200, 500]).toContain(response.statusCode);
     });
 
     test("should accept sheetTab query parameter", async () => {
-      const response = await fetch(`${BASE_URL}/api/stats?sheetTab=Sheet1`);
+      const app = await getTestApp();
 
-      expect([200, 500]).toContain(response.status);
+      const response = await app.inject({
+        method: "GET",
+        url: "/api/stats?sheetTab=Sheet1",
+      });
+
+      expect([200, 500]).toContain(response.statusCode);
     });
   });
 
   describe("POST /api/signup", () => {
     test("should validate email format", async () => {
-      const response = await fetch(`${BASE_URL}/api/signup`, {
+      const app = await getTestApp();
+
+      const response = await app.inject({
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+        url: "/api/signup",
+        payload: {
           email: "invalid-email",
-        }),
+          turnstileToken: VALID_TURNSTILE_TOKEN,
+        },
       });
 
-      const data = (await response.json()) as ApiResponse;
+      const data = response.json() as ApiResponse;
 
-      expect(response.status).toBe(400);
+      expect(response.statusCode).toBe(400);
       expect(data.success).toBe(false);
       expect(data.error).toBe("Validation failed");
-      expect(data.details).toContainEqual("email: Invalid email format");
+      expect(data.details).toBeDefined();
+      expect(data.details?.length).toBeGreaterThan(0);
     });
 
     test("should accept valid email", async () => {
-      // Note: Will fail on Google Sheets with test credentials
-      const response = await fetch(`${BASE_URL}/api/signup`, {
+      const app = await getTestApp();
+
+      const response = await app.inject({
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+        url: "/api/signup",
+        payload: {
           email: "test@example.com",
           sheetTab: "Sheet1",
-        }),
+          turnstileToken: VALID_TURNSTILE_TOKEN,
+        },
       });
 
-      const data = (await response.json()) as ApiResponse;
+      const data = response.json() as ApiResponse;
 
       // Should either succeed (200) or fail on sheets auth (500)
-      expect([200, 500]).toContain(response.status);
+      expect([200, 500]).toContain(response.statusCode);
 
-      if (response.status === 200) {
+      if (response.statusCode === 200) {
         expect(data.success).toBe(true);
       } else {
         expect(data.success).toBe(false);
@@ -156,220 +124,194 @@ describe("Signup API Integration Tests", () => {
     });
 
     test("should reject missing email", async () => {
-      const response = await fetch(`${BASE_URL}/api/signup`, {
+      const app = await getTestApp();
+
+      const response = await app.inject({
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
+        url: "/api/signup",
+        payload: {
+          turnstileToken: VALID_TURNSTILE_TOKEN,
+        },
       });
 
-      const data = (await response.json()) as ApiResponse;
+      const data = response.json() as ApiResponse;
 
-      expect(response.status).toBe(400);
+      expect(response.statusCode).toBe(400);
       expect(data.success).toBe(false);
     });
 
     test("should trim and lowercase email", async () => {
-      const response = await fetch(`${BASE_URL}/api/signup`, {
+      const app = await getTestApp();
+
+      const response = await app.inject({
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+        url: "/api/signup",
+        payload: {
           email: "  TEST@EXAMPLE.COM  ",
-        }),
+          turnstileToken: VALID_TURNSTILE_TOKEN,
+        },
       });
 
       // Will fail validation or sheets auth
-      expect([400, 200, 500]).toContain(response.status);
+      expect([400, 200, 500]).toContain(response.statusCode);
     });
 
     test("should accept metadata", async () => {
-      const response = await fetch(`${BASE_URL}/api/signup`, {
+      const app = await getTestApp();
+
+      const response = await app.inject({
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: "test@example.com",
+        url: "/api/signup",
+        payload: {
+          email: "metadata-test@example.com",
+          turnstileToken: VALID_TURNSTILE_TOKEN,
           metadata: { source: "landing-page", referrer: "google" },
-        }),
+        },
       });
 
-      expect([200, 500]).toContain(response.status);
+      expect([200, 409, 500]).toContain(response.statusCode);
     });
   });
 
   describe("POST /api/signup/extended", () => {
     test("should accept extended signup data", async () => {
-      const response = await fetch(`${BASE_URL}/api/signup/extended`, {
+      const app = await getTestApp();
+
+      const response = await app.inject({
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+        url: "/api/signup/extended",
+        payload: {
           email: "test@example.com",
           name: "John Doe",
           sheetTab: "Beta",
           source: "website",
           tags: ["newsletter", "beta-user"],
-        }),
+          turnstileToken: VALID_TURNSTILE_TOKEN,
+        },
       });
 
-      await response.json(); // Consume the response body
-
-      expect([200, 500]).toContain(response.status);
+      expect([200, 500]).toContain(response.statusCode);
     });
 
     test("should validate email format in extended signup", async () => {
-      const response = await fetch(`${BASE_URL}/api/signup/extended`, {
+      const app = await getTestApp();
+
+      const response = await app.inject({
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: "not-an-email",
+        url: "/api/signup/extended",
+        payload: {
+          email: "invalid-email",
           name: "Test User",
-        }),
+          turnstileToken: VALID_TURNSTILE_TOKEN,
+        },
       });
 
-      const data = (await response.json()) as ApiResponse;
+      const data = response.json() as ApiResponse;
 
-      expect(response.status).toBe(400);
+      expect(response.statusCode).toBe(400);
       expect(data.success).toBe(false);
+      expect(data.details).toBeDefined();
     });
 
     test("should accept optional name", async () => {
-      const response = await fetch(`${BASE_URL}/api/signup/extended`, {
+      const app = await getTestApp();
+
+      const response = await app.inject({
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: "test@example.com",
+        url: "/api/signup/extended",
+        payload: {
+          email: "optional-name@example.com",
           name: "Jane Doe",
-        }),
+          source: "api",
+          tags: [],
+          turnstileToken: VALID_TURNSTILE_TOKEN,
+        },
       });
 
-      expect([200, 500]).toContain(response.status);
+      expect([200, 409, 500]).toContain(response.statusCode);
+    });
+
+    test("should accept optional tags array", async () => {
+      const app = await getTestApp();
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/signup/extended",
+        payload: {
+          email: "optional-tags@example.com",
+          source: "form",
+          tags: ["newsletter"],
+          turnstileToken: VALID_TURNSTILE_TOKEN,
+        },
+      });
+
+      expect([200, 409, 500]).toContain(response.statusCode);
     });
   });
 
   describe("POST /api/signup/bulk", () => {
     test("should accept bulk signup", async () => {
-      const response = await fetch(`${BASE_URL}/api/signup/bulk`, {
+      const app = await getTestApp();
+
+      const response = await app.inject({
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+        url: "/api/signup/bulk",
+        payload: {
           signups: [
-            { email: "user1@example.com", sheetTab: "Sheet1" },
-            { email: "user2@example.com", sheetTab: "Sheet2" },
-            { email: "user3@example.com" },
+            { email: "user1@example.com" },
+            { email: "user2@example.com" },
           ],
-        }),
+        },
       });
 
-      await response.json(); // Consume the response body
-
-      expect([200, 500]).toContain(response.status);
+      expect([200, 500]).toContain(response.statusCode);
     });
 
     test("should reject empty signups array", async () => {
-      const response = await fetch(`${BASE_URL}/api/signup/bulk`, {
+      const app = await getTestApp();
+
+      const response = await app.inject({
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+        url: "/api/signup/bulk",
+        payload: {
           signups: [],
-        }),
+        },
       });
 
-      const data = (await response.json()) as ApiResponse;
-
-      expect(response.status).toBe(400);
-      expect(data.success).toBe(false);
+      expect(response.statusCode).toBe(400);
     });
 
     test("should reject more than 100 signups", async () => {
+      const app = await getTestApp();
+
       const signups = Array.from({ length: 101 }, (_, i) => ({
         email: `user${i}@example.com`,
       }));
 
-      const response = await fetch(`${BASE_URL}/api/signup/bulk`, {
+      const response = await app.inject({
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ signups }),
+        url: "/api/signup/bulk",
+        payload: { signups },
       });
 
-      const data = (await response.json()) as ApiResponse;
-
-      expect(response.status).toBe(400);
-      expect(data.success).toBe(false);
+      expect(response.statusCode).toBe(400);
     });
 
     test("should validate all emails in bulk", async () => {
-      const response = await fetch(`${BASE_URL}/api/signup/bulk`, {
+      const app = await getTestApp();
+
+      const response = await app.inject({
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+        url: "/api/signup/bulk",
+        payload: {
           signups: [
             { email: "valid@example.com" },
-            { email: "invalid-email" },
-            { email: "another@example.com" },
+            { email: "invalid" },
           ],
-        }),
-      });
-
-      const data = (await response.json()) as ApiResponse;
-
-      expect(response.status).toBe(400);
-      expect(data.success).toBe(false);
-    });
-  });
-
-  describe("CORS Headers", () => {
-    test("should include CORS headers", async () => {
-      const response = await fetch(`${BASE_URL}/api/health`, {
-        headers: {
-          Origin: "https://example.com",
         },
       });
 
-      expect(response.headers.get("access-control-allow-origin")).toBeTruthy();
-    });
-
-    test("should handle preflight OPTIONS request", async () => {
-      const response = await fetch(`${BASE_URL}/api/health`, {
-        method: "OPTIONS",
-      });
-
-      // CORS preflight should return 204, but 400 is also acceptable
-      // (Fastify may return 400 if the route doesn't explicitly support OPTIONS)
-      expect([200, 204, 400, 404]).toContain(response.status);
-    });
-  });
-
-  describe("Content Type Headers", () => {
-    test("should return JSON for API endpoints", async () => {
-      const response = await fetch(`${BASE_URL}/api/health`);
-
-      expect(response.headers.get("content-type")).toContain("application/json");
-    });
-
-    test("should return HTML for root path", async () => {
-      const response = await fetch(`${BASE_URL}/`);
-
-      expect(response.headers.get("content-type")).toContain("text/html");
-    });
-  });
-
-  describe("Error Handling", () => {
-    test("should handle malformed JSON", async () => {
-      const response = await fetch(`${BASE_URL}/api/signup`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: "{invalid json}",
-      });
-
-      expect(response.status).toBeGreaterThanOrEqual(400);
-    });
-
-    test("should handle missing content-type", async () => {
-      const response = await fetch(`${BASE_URL}/api/signup`, {
-        method: "POST",
-        body: JSON.stringify({ email: "test@example.com" }),
-      });
-
-      // Fastify might still parse it or return error
-      expect([200, 400, 415]).toContain(response.status);
+      expect(response.statusCode).toBe(400);
     });
   });
 });

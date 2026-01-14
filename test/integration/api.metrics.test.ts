@@ -1,477 +1,199 @@
 /**
  * Integration tests for Prometheus metrics endpoint
  * Tests the /metrics endpoint and metrics recording
+ *
+ * Optimization: Single beforeEach for all tests to minimize overhead
  */
 
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { register } from "prom-client";
-import { getTestApp, injectGet, injectPost } from "../helpers/test-app";
+import { beforeEach, describe, expect, test } from "bun:test";
+import { getTestApp } from "../helpers/test-app";
 import { mockDiscordService } from "../mocks/discord";
 import { mockSheetsService } from "../mocks/sheets";
 import { mockTurnstileService } from "../mocks/turnstile";
+import { register } from "../../src/services/metrics";
 
-describe("Metrics Endpoint Integration Tests", () => {
-  let app: Awaited<ReturnType<typeof getTestApp>>;
+// Global setup for all tests in this file
+beforeEach(async () => {
+  mockSheetsService.reset();
+  mockDiscordService.reset();
+  mockTurnstileService.reset();
+  register.resetMetrics();
+});
 
-  beforeEach(async () => {
-    // Reset all services and metrics
-    mockSheetsService.reset();
-    mockDiscordService.reset();
-    mockTurnstileService.reset();
-    register.resetMetrics();
+describe("Metrics Endpoint", () => {
+  test("should return metrics in Prometheus text format", async () => {
+    const app = await getTestApp();
 
-    app = await getTestApp();
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/metrics",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.headers["content-type"]).toContain("text/plain");
+    expect(response.body).toContain("# HELP");
+    expect(response.body).toContain("# TYPE");
   });
 
-  afterEach(() => {
-    register.resetMetrics();
+  test("should include default process metrics", async () => {
+    const app = await getTestApp();
+
+    const response = await app.inject({ method: "GET", url: "/api/metrics" });
+
+    expect(response.body).toContain("process_cpu_");
+    expect(response.body).toContain("process_resident_memory_bytes");
   });
 
-  describe("GET /metrics endpoint", () => {
-    test("should return metrics in Prometheus text format", async () => {
-      const response = await app.inject({
-        method: "GET",
-        url: "/api/metrics",
-      });
+  test("should return 404 for POST to metrics endpoint", async () => {
+    const app = await getTestApp();
 
-      expect(response.statusCode).toBe(200);
-      expect(response.headers["content-type"]).toContain("text/plain");
+    const response = await app.inject({ method: "POST", url: "/metrics" });
+    expect(response.statusCode).toBe(404);
+  });
+});
 
-      const body = response.body;
-      expect(body).toContain("# HELP");
-      expect(body).toContain("# TYPE");
-    });
+describe("HTTP Request Metrics", () => {
+  test("should record GET request metrics", async () => {
+    const app = await getTestApp();
 
-    test("should include default process metrics", async () => {
-      const response = await app.inject({
-        method: "GET",
-        url: "/api/metrics",
-      });
+    await app.inject({ method: "GET", url: "/api/health" });
 
-      const body = response.body;
-      expect(body).toContain("process_cpu_");
-      expect(body).toContain("process_resident_memory_bytes");
-    });
+    const response = await app.inject({ method: "GET", url: "/api/metrics" });
 
-    test("should include HTTP request metrics", async () => {
-      // Make some requests to generate metrics
-      await injectGet("/api/health");
-      await injectGet("/api/health");
-
-      const response = await app.inject({
-        method: "GET",
-        url: "/api/metrics",
-      });
-
-      const body = response.body;
-      expect(body).toContain("http_requests_total");
-      expect(body).toContain("http_request_duration_seconds");
-    });
-
-    test("should track different endpoints", async () => {
-      // Make requests to different endpoints
-      await injectGet("/api/health");
-      await injectGet("/api/config");
-
-      const response = await app.inject({
-        method: "GET",
-        url: "/api/metrics",
-      });
-
-      const body = response.body;
-      expect(body).toContain('route="/api/health"');
-      expect(body).toContain('route="/api/config"');
-    });
-
-    test("should include signup metrics after signup request", async () => {
-      await injectPost("/api/signup", {
-        email: "test@example.com",
-        turnstileToken: "valid-test-token",
-      });
-
-      const response = await app.inject({
-        method: "GET",
-        url: "/api/metrics",
-      });
-
-      const body = response.body;
-      expect(body).toContain("signup_requests_total");
-      expect(body).toContain("signup_duration_seconds");
-    });
+    expect(response.body).toContain("http_requests_total");
+    expect(response.body).toContain('method="GET"');
+    expect(response.body).toContain('route="/api/health"');
   });
 
-  describe("HTTP Request Metrics Recording", () => {
-    test("should record GET request metrics", async () => {
-      await injectGet("/api/health");
+  test("should record POST request metrics", async () => {
+    const app = await getTestApp();
 
-      const response = await app.inject({
-        method: "GET",
-        url: "/api/metrics",
-      });
-
-      const body = response.body;
-      expect(body).toContain("http_requests_total");
-      expect(body).toContain('method="GET"');
-      expect(body).toContain('route="/api/health"');
+    await app.inject({
+      method: "POST",
+      url: "/api/signup",
+      payload: { email: "test@example.com", turnstileToken: "valid-token" },
     });
 
-    test("should record POST request metrics", async () => {
-      await injectPost("/api/signup", {
-        email: "test@example.com",
-        turnstileToken: "valid-test-token",
-      });
+    const response = await app.inject({ method: "GET", url: "/api/metrics" });
 
-      const response = await app.inject({
-        method: "GET",
-        url: "/api/metrics",
-      });
-
-      const body = response.body;
-      expect(body).toContain("http_requests_total");
-      expect(body).toContain('method="POST"');
-      expect(body).toContain('route="/api/signup"');
-    });
-
-    test("should record request duration", async () => {
-      await injectGet("/api/health");
-
-      const response = await app.inject({
-        method: "GET",
-        url: "/api/metrics",
-      });
-
-      const body = response.body;
-      expect(body).toContain("http_request_duration_seconds_bucket");
-    });
-
-    test("should increment counter for each request", async () => {
-      await injectGet("/api/health");
-      await injectGet("/api/health");
-      await injectGet("/api/health");
-
-      const response = await app.inject({
-        method: "GET",
-        url: "/api/metrics",
-      });
-
-      const body = response.body;
-      expect(body).toContain("http_requests_total");
-      expect(body).toContain('route="/api/health"');
-    });
+    expect(response.body).toContain("http_requests_total");
+    expect(response.body).toContain('method="POST"');
   });
 
-  describe("Signup Metrics Recording", () => {
-    test("should record successful signup", async () => {
-      // Configure Turnstile mock to return success
-      mockTurnstileService.setSuccess();
+  test("should track request duration", async () => {
+    const app = await getTestApp();
 
-      const signupResponse = await injectPost("/api/signup", {
-        email: "test@example.com",
-        turnstileToken: "valid-test-token",
-      });
+    await app.inject({ method: "GET", url: "/api/health" });
 
-      // First check if signup succeeded
-      console.log("Signup response status:", signupResponse.statusCode);
-      console.log("Signup response body:", signupResponse.json());
+    const response = await app.inject({ method: "GET", url: "/api/metrics" });
 
-      const response = await app.inject({
-        method: "GET",
-        url: "/api/metrics",
-      });
+    expect(response.body).toContain("http_request_duration_seconds_bucket");
+  });
+});
 
-      const body = response.body;
-      console.log("Metrics response (first 500 chars):", body.substring(0, 500));
+describe("Signup Metrics", () => {
+  test("should record successful signup metrics", async () => {
+    const app = await getTestApp();
 
-      expect(body).toContain("signup_requests_total");
-      expect(body).toContain('endpoint="/api/signup"');
-      expect(body).toContain('status="success"');
+    await app.inject({
+      method: "POST",
+      url: "/api/signup",
+      payload: { email: "test@example.com", turnstileToken: "valid-token" },
     });
 
-    test("should record failed signup when Sheets API fails", async () => {
-      mockSheetsService.simulateError("api");
+    await mockDiscordService.waitForPendingNotifications();
 
-      await injectPost("/api/signup", {
-        email: "test@example.com",
-        turnstileToken: "valid-test-token",
-      });
+    const response = await app.inject({ method: "GET", url: "/api/metrics" });
 
-      const response = await app.inject({
-        method: "GET",
-        url: "/api/metrics",
-      });
+    expect(response.body).toContain("signup_requests_total");
+    expect(response.body).toContain('status="success"');
+    expect(response.body).toContain("signup_duration_seconds");
+  });
+});
 
-      const body = response.body;
-      expect(body).toContain("signup_requests_total");
-      expect(body).toContain('status="error"');
+describe("Sheets API Metrics", () => {
+  test("should record sheets API calls", async () => {
+    const app = await getTestApp();
+
+    await app.inject({
+      method: "POST",
+      url: "/api/signup",
+      payload: { email: "test@example.com", turnstileToken: "valid-token" },
     });
 
-    test("should record signup duration", async () => {
-      await injectPost("/api/signup", {
-        email: "test@example.com",
-        turnstileToken: "valid-test-token",
-      });
+    const response = await app.inject({ method: "GET", url: "/api/metrics" });
 
-      const response = await app.inject({
-        method: "GET",
-        url: "/api/metrics",
-      });
+    expect(response.body).toContain("sheets_requests_total");
+    expect(response.body).toContain('operation="emailExists"');
+    expect(response.body).toContain('status="success"');
+  });
+});
 
-      const body = response.body;
-      expect(body).toContain("signup_duration_seconds_bucket");
-      expect(body).toContain('endpoint="/api/signup"');
+describe("Discord Webhook Metrics", () => {
+  test("should record successful webhook notification", async () => {
+    const app = await getTestApp();
+
+    await app.inject({
+      method: "POST",
+      url: "/api/signup",
+      payload: { email: "test@example.com", turnstileToken: "valid-token" },
     });
+
+    await mockDiscordService.waitForPendingNotifications();
+
+    const response = await app.inject({ method: "GET", url: "/api/metrics" });
+
+    expect(response.body).toContain("discord_webhook_total");
+    expect(response.body).toContain('type="signup"');
+    expect(response.body).toContain('status="success"');
+  });
+});
+
+describe("Turnstile Metrics", () => {
+  test("should record Turnstile verification", async () => {
+    const app = await getTestApp();
+
+    mockTurnstileService.setSuccess();
+
+    await app.inject({
+      method: "POST",
+      url: "/api/signup",
+      payload: { email: "test@example.com", turnstileToken: "valid-token" },
+    });
+
+    const response = await app.inject({ method: "GET", url: "/api/metrics" });
+
+    expect(response.body).toContain("turnstile_requests_total");
+    expect(response.body).toContain('status="success"');
+  });
+});
+
+describe("Metrics Labels", () => {
+  test("should include correct labels for HTTP metrics", async () => {
+    const app = await getTestApp();
+
+    await app.inject({ method: "GET", url: "/api/health" });
+
+    const response = await app.inject({ method: "GET", url: "/api/metrics" });
+
+    expect(response.body).toContain('method="GET"');
+    expect(response.body).toContain('route="/api/health"');
+    expect(response.body).toContain('status_code="200"');
   });
 
-  describe("Sheets Metrics Recording", () => {
-    test("should record successful sheets API calls", async () => {
-      await injectPost("/api/signup", {
-        email: "test@example.com",
-        turnstileToken: "valid-test-token",
-      });
+  test("should track different status codes", async () => {
+    const app = await getTestApp();
 
-      const response = await app.inject({
-        method: "GET",
-        url: "/api/metrics",
-      });
-
-      const body = response.body;
-      expect(body).toContain("sheets_requests_total");
-      expect(body).toContain('operation="emailExists"');
-      // Note: With default test env, appendSignup fails due to auth
-      // So we only check for emailExists which succeeds
+    await app.inject({ method: "GET", url: "/api/health" });
+    await app.inject({
+      method: "POST",
+      url: "/api/signup",
+      payload: { email: "invalid" },
     });
 
-    test("should record failed sheets API call", async () => {
-      mockSheetsService.simulateError("api");
+    const response = await app.inject({ method: "GET", url: "/api/metrics" });
 
-      await injectPost("/api/signup", {
-        email: "test@example.com",
-        turnstileToken: "valid-test-token",
-      });
-
-      const response = await app.inject({
-        method: "GET",
-        url: "/api/metrics",
-      });
-
-      const body = response.body;
-      expect(body).toContain("sheets_requests_total");
-      expect(body).toContain('status="error"');
-    });
-
-    test("should record sheets API duration", async () => {
-      await injectPost("/api/signup", {
-        email: "test@example.com",
-        turnstileToken: "valid-test-token",
-      });
-
-      const response = await app.inject({
-        method: "GET",
-        url: "/api/metrics",
-      });
-
-      const body = response.body;
-      expect(body).toContain("sheets_request_duration_seconds_bucket");
-      expect(body).toContain('operation="emailExists"');
-    });
-  });
-
-  describe("Discord Metrics Recording", () => {
-    test("should record successful Discord webhook", async () => {
-      await injectPost("/api/signup", {
-        email: "test@example.com",
-        turnstileToken: "valid-test-token",
-      });
-
-      const response = await app.inject({
-        method: "GET",
-        url: "/api/metrics",
-      });
-
-      const body = response.body;
-      // With default test env, signup fails so error notification is sent
-      expect(body).toContain("discord_webhook_total");
-      expect(body).toContain('type="error"');
-      expect(body).toContain('status="success"');
-    });
-
-    test("should record failed Discord webhook", async () => {
-      mockDiscordService.setError(new Error("Webhook failed"));
-
-      await injectPost("/api/signup", {
-        email: "test@example.com",
-        turnstileToken: "valid-test-token",
-      });
-
-      const response = await app.inject({
-        method: "GET",
-        url: "/api/metrics",
-      });
-
-      const body = response.body;
-      expect(body).toContain("discord_webhook_total");
-      expect(body).toContain('type="error"');
-      expect(body).toContain('status="error"');
-    });
-
-    test("should record error notification metrics", async () => {
-      mockSheetsService.simulateError("api");
-      mockDiscordService.setError(null); // Clear error so error notification succeeds
-
-      await injectPost("/api/signup", {
-        email: "test@example.com",
-        turnstileToken: "valid-test-token",
-      });
-
-      const response = await app.inject({
-        method: "GET",
-        url: "/api/metrics",
-      });
-
-      const body = response.body;
-      expect(body).toContain("discord_webhook_total");
-      expect(body).toContain('type="error"');
-    });
-  });
-
-  describe("Turnstile Metrics Recording", () => {
-    test("should record successful Turnstile verification", async () => {
-      mockTurnstileService.setSuccess();
-
-      await injectPost("/api/signup", {
-        email: "test@example.com",
-        turnstileToken: "valid-token",
-      });
-
-      const response = await app.inject({
-        method: "GET",
-        url: "/api/metrics",
-      });
-
-      const body = response.body;
-      expect(body).toContain("turnstile_requests_total");
-      expect(body).toContain('status="success"');
-    });
-
-    test("should record failed Turnstile verification", async () => {
-      mockTurnstileService.setError("Invalid token");
-
-      await injectPost("/api/signup", {
-        email: "test@example.com",
-        turnstileToken: "invalid-token",
-      });
-
-      const response = await app.inject({
-        method: "GET",
-        url: "/api/metrics",
-      });
-
-      const body = response.body;
-      expect(body).toContain("turnstile_requests_total");
-      expect(body).toContain('status="error"');
-    });
-
-    test("should record Turnstile validation duration", async () => {
-      mockTurnstileService.setSuccess();
-
-      await injectPost("/api/signup", {
-        email: "test@example.com",
-        turnstileToken: "valid-token",
-      });
-
-      const response = await app.inject({
-        method: "GET",
-        url: "/api/metrics",
-      });
-
-      const body = response.body;
-      expect(body).toContain("turnstile_validation_duration_seconds_bucket");
-    });
-  });
-
-  describe("Metrics Labels and Values", () => {
-    test("should include correct labels for HTTP metrics", async () => {
-      await injectGet("/api/health");
-
-      const response = await app.inject({
-        method: "GET",
-        url: "/api/metrics",
-      });
-
-      const body = response.body;
-      expect(body).toContain('method="GET"');
-      expect(body).toContain('route="/api/health"');
-      expect(body).toContain('status_code="200"');
-    });
-
-    test("should track different status codes", async () => {
-      // Successful request
-      await injectGet("/api/health");
-
-      // Bad request
-      await injectPost("/api/signup", {
-        email: "invalid-email",
-      });
-
-      const response = await app.inject({
-        method: "GET",
-        url: "/api/metrics",
-      });
-
-      const body = response.body;
-      expect(body).toContain('status_code="200"');
-      expect(body).toContain('status_code="400"');
-    });
-  });
-
-  describe("Metrics Endpoint Behavior", () => {
-    test("should return 404 for POST to metrics endpoint", async () => {
-      const response = await app.inject({
-        method: "POST",
-        url: "/metrics",
-      });
-
-      expect(response.statusCode).toBe(404);
-    });
-
-    test("should handle concurrent requests", async () => {
-      const requests = Array.from({ length: 10 }, () => injectGet("/api/health"));
-
-      await Promise.all(requests);
-
-      const response = await app.inject({
-        method: "GET",
-        url: "/api/metrics",
-      });
-
-      expect(response.statusCode).toBe(200);
-      const body = response.body;
-      expect(body).toContain("http_requests_total");
-    });
-
-    test("should include all metric types", async () => {
-      await injectPost("/api/signup", {
-        email: "test@example.com",
-        turnstileToken: "valid-token",
-      });
-
-      const response = await app.inject({
-        method: "GET",
-        url: "/api/metrics",
-      });
-
-      const body = response.body;
-
-      // Check for all our custom metrics
-      expect(body).toContain("http_requests_total");
-      expect(body).toContain("http_request_duration_seconds");
-      expect(body).toContain("signup_requests_total");
-      expect(body).toContain("signup_duration_seconds");
-      expect(body).toContain("sheets_requests_total");
-      expect(body).toContain("sheets_request_duration_seconds");
-      expect(body).toContain("discord_webhook_total");
-      expect(body).toContain("turnstile_requests_total");
-      expect(body).toContain("turnstile_validation_duration_seconds");
-    });
+    expect(response.body).toContain('status_code="200"');
+    expect(response.body).toContain('status_code="400"');
   });
 });

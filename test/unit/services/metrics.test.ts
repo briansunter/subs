@@ -15,7 +15,7 @@ import {
   register,
 } from "../../../src/services/metrics";
 
-describe("Metrics Service - Unit Tests", () => {
+describe.serial("Metrics Service - Unit Tests", () => {
   beforeEach(() => {
     // Clear all metrics before each test
     register.resetMetrics();

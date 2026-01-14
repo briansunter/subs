@@ -12,6 +12,7 @@ let mockNotifications: NotificationEntry[] = [];
 let mockError: Error | null = null;
 let mockSignupError: Error | null = null;
 let mockErrorNotificationError: Error | null = null;
+let pendingPromises: Promise<unknown>[] = [];
 
 export const mockDiscordService = {
   reset() {
@@ -19,6 +20,16 @@ export const mockDiscordService = {
     mockError = null;
     mockSignupError = null;
     mockErrorNotificationError = null;
+    pendingPromises = [];
+  },
+
+  /**
+   * Wait for all pending notification promises to settle
+   * This allows tests to wait for async Discord operations to complete
+   */
+  async waitForPendingNotifications(): Promise<void> {
+    await Promise.allSettled(pendingPromises);
+    pendingPromises = [];
   },
 
   setError(error: Error | null) {
@@ -50,38 +61,6 @@ export const mockDiscordService = {
     return mockNotifications.filter((n) => n.type === type);
   },
 
-  // Verify notification content
-  assertLastNotificationContains(text: string): boolean {
-    const last = mockNotifications[mockNotifications.length - 1];
-    if (!last) return false;
-    return JSON.stringify(last.payload).includes(text);
-  },
-
-  // Count notifications by email
-  countNotificationsForEmail(email: string): number {
-    return mockNotifications.filter((n) => {
-      if (n.type !== "signup") return false;
-      const embeds = (n.payload as { embeds?: Array<{ fields?: unknown[] }> }).embeds;
-      if (!embeds || !embeds[0]?.fields) return false;
-      const fields = embeds[0].fields as Array<{ value: string }>;
-      return fields.some((f) => f.value === email);
-    }).length;
-  },
-
-  // Get all emails from signup notifications
-  getEmailsFromSignupNotifications(): string[] {
-    return mockNotifications
-      .filter((n) => n.type === "signup")
-      .map((n) => {
-        const embeds = (n.payload as { embeds?: Array<{ fields?: unknown[] }> }).embeds;
-        if (!embeds || !embeds[0]?.fields) return null;
-        const fields = embeds[0].fields as Array<{ name: string; value: string }>;
-        const emailField = fields.find((f) => f.name === "Email");
-        return emailField?.value ?? null;
-      })
-      .filter((email): email is string => email !== null);
-  },
-
   // Mock implementation
   sendDiscordNotification: async (payload: unknown) => {
     if (mockError) throw mockError;
@@ -99,78 +78,98 @@ export const mockDiscordService = {
     name?: string;
     source?: string;
     tags?: string[];
-  }) => {
+  }, webhookUrl?: string) => {
+    // Skip if webhook URL not configured (mimics production behavior)
+    if (!webhookUrl) {
+      return;
+    }
+
     // Check specific error first, then general error
     if (mockSignupError || mockError) throw mockSignupError || mockError;
 
-    const fields: Array<{ name: string; value: string; inline?: boolean }> = [
-      { name: "Email", value: data.email, inline: true },
-      { name: "Sheet Tab", value: data.sheetTab, inline: true },
-    ];
+    const promise = (async () => {
+      const fields: Array<{ name: string; value: string; inline?: boolean }> = [
+        { name: "Email", value: data.email, inline: true },
+        { name: "Sheet Tab", value: data.sheetTab, inline: true },
+      ];
 
-    if (data.name) {
-      fields.push({ name: "Name", value: data.name, inline: true });
-    }
+      if (data.name) {
+        fields.push({ name: "Name", value: data.name, inline: true });
+      }
 
-    if (data.source) {
-      fields.push({ name: "Source", value: data.source, inline: true });
-    }
+      if (data.source) {
+        fields.push({ name: "Source", value: data.source, inline: true });
+      }
 
-    if (data.tags && data.tags.length > 0) {
-      fields.push({ name: "Tags", value: data.tags.join(", "), inline: false });
-    }
+      if (data.tags && data.tags.length > 0) {
+        fields.push({ name: "Tags", value: data.tags.join(", "), inline: false });
+      }
 
-    mockNotifications.push({
-      type: "signup",
-      payload: {
-        username: "Signup Bot",
-        embeds: [
-          {
-            title: "🎉 New Signup!",
-            description: "A new user has signed up",
-            color: 5763719,
-            fields,
-            timestamp: new Date().toISOString(),
-          },
-        ],
-      },
-      timestamp: Date.now(),
-    });
+      mockNotifications.push({
+        type: "signup",
+        payload: {
+          username: "Signup Bot",
+          embeds: [
+            {
+              title: "🎉 New Signup!",
+              description: "A new user has signed up",
+              color: 5763719,
+              fields,
+              timestamp: new Date().toISOString(),
+            },
+          ],
+        },
+        timestamp: Date.now(),
+      });
+    })();
+
+    pendingPromises.push(promise);
+    return promise;
   },
 
-  sendErrorNotification: async (data: { message: string; context?: Record<string, unknown> }) => {
+  sendErrorNotification: async (data: { message: string; context?: Record<string, unknown> }, webhookUrl?: string) => {
+    // Skip if webhook URL not configured (mimics production behavior)
+    if (!webhookUrl) {
+      return;
+    }
+
     // Check specific error first, then general error
     if (mockErrorNotificationError || mockError) throw mockErrorNotificationError || mockError;
 
-    const embed: {
-      title: string;
-      description: string;
-      color: number;
-      timestamp: string;
-      fields?: Array<{ name: string; value: string; inline?: boolean }>;
-    } = {
-      title: "❌ Signup Error",
-      description: data.message,
-      color: 15548997,
-      timestamp: new Date().toISOString(),
-    };
+    const promise = (async () => {
+      const embed: {
+        title: string;
+        description: string;
+        color: number;
+        timestamp: string;
+        fields?: Array<{ name: string; value: string; inline?: boolean }>;
+      } = {
+        title: "❌ Signup Error",
+        description: data.message,
+        color: 15548997,
+        timestamp: new Date().toISOString(),
+      };
 
-    if (data.context) {
-      embed.fields = Object.entries(data.context).map(([key, value]) => ({
-        name: key,
-        value: String(value),
-        inline: true,
-      }));
-    }
+      if (data.context) {
+        embed.fields = Object.entries(data.context).map(([key, value]) => ({
+          name: key,
+          value: String(value),
+          inline: true,
+        }));
+      }
 
-    mockNotifications.push({
-      type: "error",
-      payload: {
-        username: "Signup Bot",
-        embeds: [embed],
-      },
-      timestamp: Date.now(),
-    });
+      mockNotifications.push({
+        type: "error",
+        payload: {
+          username: "Signup Bot",
+          embeds: [embed],
+        },
+        timestamp: Date.now(),
+      });
+    })();
+
+    pendingPromises.push(promise);
+    return promise;
   },
 };
 

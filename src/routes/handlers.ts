@@ -144,11 +144,17 @@ export async function handleSignup(data: SignupInput, ctx: SignupContext): Promi
 
     // Check if email already exists
     const sheetsStartTime = Date.now();
-    const exists = await ctx.sheets.emailExists(
-      validationResult.data.email,
-      validationResult.data.sheetTab,
-    );
-    recordSheetsRequest("emailExists", true, (Date.now() - sheetsStartTime) / 1000);
+    let exists = false;
+    try {
+      exists = await ctx.sheets.emailExists(
+        validationResult.data.email,
+        validationResult.data.sheetTab,
+      );
+      recordSheetsRequest("emailExists", true, (Date.now() - sheetsStartTime) / 1000);
+    } catch (error) {
+      recordSheetsRequest("emailExists", false, (Date.now() - sheetsStartTime) / 1000);
+      throw error; // Re-throw to be caught by outer handler
+    }
 
     if (exists) {
       return {
@@ -160,15 +166,20 @@ export async function handleSignup(data: SignupInput, ctx: SignupContext): Promi
 
     // Store in Google Sheets
     const appendStartTime = Date.now();
-    await ctx.sheets.appendSignup({
-      email: validationResult.data.email,
-      timestamp: new Date().toISOString(),
-      sheetTab: validationResult.data.sheetTab || ctx.config.defaultSheetTab,
-      metadata: validationResult.data.metadata
-        ? JSON.stringify(validationResult.data.metadata)
-        : undefined,
-    });
-    recordSheetsRequest("appendSignup", true, (Date.now() - appendStartTime) / 1000);
+    try {
+      await ctx.sheets.appendSignup({
+        email: validationResult.data.email,
+        timestamp: new Date().toISOString(),
+        sheetTab: validationResult.data.sheetTab || ctx.config.defaultSheetTab,
+        metadata: validationResult.data.metadata
+          ? JSON.stringify(validationResult.data.metadata)
+          : undefined,
+      });
+      recordSheetsRequest("appendSignup", true, (Date.now() - appendStartTime) / 1000);
+    } catch (error) {
+      recordSheetsRequest("appendSignup", false, (Date.now() - appendStartTime) / 1000);
+      throw error; // Re-throw to be caught by outer handler
+    }
 
     // Send Discord notification (non-blocking, errors ignored)
     ctx.discord
@@ -260,11 +271,17 @@ export async function handleExtendedSignup(
 
     // Check if email already exists
     const sheetsStartTime = Date.now();
-    const exists = await ctx.sheets.emailExists(
-      validationResult.data.email,
-      validationResult.data.sheetTab,
-    );
-    recordSheetsRequest("emailExists", true, (Date.now() - sheetsStartTime) / 1000);
+    let exists = false;
+    try {
+      exists = await ctx.sheets.emailExists(
+        validationResult.data.email,
+        validationResult.data.sheetTab,
+      );
+      recordSheetsRequest("emailExists", true, (Date.now() - sheetsStartTime) / 1000);
+    } catch (error) {
+      recordSheetsRequest("emailExists", false, (Date.now() - sheetsStartTime) / 1000);
+      throw error; // Re-throw to be caught by outer handler
+    }
 
     if (exists) {
       return {

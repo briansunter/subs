@@ -20,6 +20,9 @@ describe("Signup Routes - Unit Tests", () => {
     mockSheetsService.reset();
     mockDiscordService.reset();
 
+    // Enable operation logging for tests that need to verify calls
+    mockSheetsService.enableOperationLogging();
+
     // Create mock context
     mockContext = {
       sheets: {

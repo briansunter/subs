@@ -23,6 +23,7 @@ export const signupSchema = z.object({
   email: emailSchema,
   sheetTab: z.string().min(1, "Sheet tab name is required").optional().default("Sheet1"),
   metadata: z.record(z.string(), z.any()).optional(),
+  turnstileToken: z.string().optional(),
 });
 
 /**

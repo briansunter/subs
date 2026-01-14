@@ -6,26 +6,35 @@
 import cors from "@fastify/cors";
 import Fastify from "fastify";
 import { clearConfigCache as _clearConfigCache, config } from "../../src/config";
+import type { SignupContext } from "../../src/routes/handlers";
 import { signupRoutes } from "../../src/routes/signup";
-import "../../src/schemas/signup";
 
 // Import metrics to ensure they're registered for tests
-import "../../src/services/metrics";
+import { register } from "../../src/services/metrics";
+
+// Import mock services
+import { mockDiscordService } from "../mocks/discord";
+import { mockSheetsService } from "../mocks/sheets";
+import { mockTurnstileService } from "../mocks/turnstile";
 
 // Re-export clearConfigCache for convenience
 export { _clearConfigCache as clearConfigCache };
 
-let testApp: ReturnType<typeof Fastify> | null = null;
+// Re-export mock services for test convenience
+export { mockDiscordService, mockSheetsService, mockTurnstileService };
+export { register };
 
 /**
- * Get or create the test Fastify app
+ * Create a fresh test Fastify app instance
  * Uses inject() for super-fast HTTP simulation without network
+ * Each call creates a new instance to ensure test isolation
+ *
+ * Note: Creating a new app per test is intentional for isolation.
+ * The config object is captured at app creation time, so tests that
+ * modify environment variables should clear the config cache and
+ * create a new app to pick up the changes.
  */
 export async function getTestApp() {
-  if (testApp) {
-    return testApp;
-  }
-
   const fastify = Fastify({
     logger: false,
   });
@@ -39,50 +48,32 @@ export async function getTestApp() {
     maxAge: 86400,
   });
 
-  // Register routes
-  await fastify.register(signupRoutes, { prefix: "/api" });
+  // Create test context with mocked services
+  const testContext: SignupContext = {
+    sheets: {
+      appendSignup: mockSheetsService.appendSignup,
+      emailExists: mockSheetsService.emailExists,
+      getSignupStats: mockSheetsService.getSignupStats,
+    },
+    discord: {
+      sendSignupNotification: mockDiscordService.sendSignupNotification,
+      sendErrorNotification: mockDiscordService.sendErrorNotification,
+    },
+    turnstile: {
+      verifyTurnstileToken: mockTurnstileService.verifyTurnstileToken,
+    },
+    config,
+  };
 
-  testApp = fastify;
+  // Register routes with mocked context
+  await fastify.register(signupRoutes, {
+    prefix: "/api",
+    context: testContext,
+  });
+
   return fastify;
 }
 
-/**
- * Reset the test app (call between tests if needed)
- */
-export function resetTestApp(): void {
-  testApp = null;
-}
-
-/**
- * Helper to make a test request using inject()
- * Simulates HTTP without starting a server
- */
-export async function injectRequest(path: string, method: "GET" | "POST" = "GET", body?: unknown) {
-  const app = await getTestApp();
-
-  return app.inject({
-    method,
-    url: path,
-    payload: body,
-    headers: {
-      "Content-Type": "application/json",
-    },
-  });
-}
-
-/**
- * Helper for POST requests
- */
-export async function injectPost(path: string, body: unknown) {
-  return injectRequest(path, "POST", body);
-}
-
-/**
- * Helper for GET requests
- */
-export async function injectGet(path: string) {
-  return injectRequest(path, "GET");
-}
 
 /**
  * Set test environment variables
@@ -117,3 +108,10 @@ export const DEFAULT_TEST_ENV = {
   CLOUDFLARE_TURNSTILE_SECRET_KEY: "1x0000000000000000000000000000000AA",
   CLOUDFLARE_TURNSTILE_SITE_KEY: "1x0000000000000000000000000000000AA",
 } as const;
+
+/**
+ * Cloudflare Turnstile test token that always passes
+ * From: https://developers.cloudflare.com/turnstile/reference/testing
+ */
+export const VALID_TURNSTILE_TOKEN = "1x0000000000000000000000000000000AA";
+

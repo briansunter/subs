@@ -106,6 +106,11 @@ let cachedConfig: SignupConfig | undefined;
  */
 export function getConfig(): SignupConfig {
   if (!cachedConfig) {
+    console.log("[src/config.ts] Loading config from environment:", {
+      "process.env.ENABLE_BULK_SIGNUP": process.env["ENABLE_BULK_SIGNUP"],
+      "process.env.ENABLE_EXTENDED_SIGNUP": process.env["ENABLE_EXTENDED_SIGNUP"],
+      "process.env.ENABLE_METRICS": process.env["ENABLE_METRICS"],
+    });
     cachedConfig = loadEnv();
   }
   return cachedConfig;

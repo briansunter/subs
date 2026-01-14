@@ -1,26 +1,63 @@
 /**
  * Mock Discord webhook service for testing
+ * Improved with proper test isolation
  */
 
 interface NotificationEntry {
   type: "signup" | "error" | "custom";
   payload: unknown;
   timestamp: number;
+  testId?: string; // Track which test generated this notification
 }
 
 let mockNotifications: NotificationEntry[] = [];
 let mockError: Error | null = null;
 let mockSignupError: Error | null = null;
 let mockErrorNotificationError: Error | null = null;
-let pendingPromises: Promise<unknown>[] = [];
+let pendingPromises: Map<string, Promise<unknown>> = new Map();
+let currentTestId: string = "";
+let callCount = 0; // Track how many times sendSignupNotification is called (global)
+let callCountSinceReset = 0; // Track calls since last reset (test-scoped)
 
 export const mockDiscordService = {
+  /**
+   * Set a unique test ID to track notifications from this test
+   * This helps isolate notifications between tests
+   */
+  setTestId(testId: string) {
+    currentTestId = testId;
+  },
+
+  /**
+   * Clear all test IDs from notifications
+   */
+  clearTestIds() {
+    currentTestId = "";
+  },
+
   reset() {
-    mockNotifications = [];
-    mockError = null;
-    mockSignupError = null;
-    mockErrorNotificationError = null;
-    pendingPromises = [];
+    // Wait for all pending promises to complete before clearing
+    return Promise.allSettled(Array.from(pendingPromises.values())).then(() => {
+      mockNotifications = [];
+      mockError = null;
+      mockSignupError = null;
+      mockErrorNotificationError = null;
+      pendingPromises.clear();
+      callCount = 0; // Reset global call count
+      callCountSinceReset = 0; // Reset test-scoped call count
+    });
+  },
+
+  getCallCount() {
+    return callCount;
+  },
+
+  /**
+   * Get call count since last reset (test-scoped)
+   * This is the recommended method for tests to use
+   */
+  getCallCountSinceReset() {
+    return callCountSinceReset;
   },
 
   /**
@@ -28,8 +65,35 @@ export const mockDiscordService = {
    * This allows tests to wait for async Discord operations to complete
    */
   async waitForPendingNotifications(): Promise<void> {
-    await Promise.allSettled(pendingPromises);
-    pendingPromises = [];
+    await Promise.allSettled(Array.from(pendingPromises.values()));
+    pendingPromises.clear();
+  },
+
+  /**
+   * Get notifications from the current test only
+   */
+  getNotifications(): NotificationEntry[] {
+    if (!currentTestId) {
+      return mockNotifications;
+    }
+    return mockNotifications.filter((n) => n.testId === currentTestId);
+  },
+
+  /**
+   * Get all notifications (for backwards compatibility)
+   */
+  getAllNotifications(): NotificationEntry[] {
+    return mockNotifications;
+  },
+
+  /**
+   * Get notification count from the current test only
+   */
+  getNotificationCount(): number {
+    if (!currentTestId) {
+      return mockNotifications.length;
+    }
+    return mockNotifications.filter((n) => n.testId === currentTestId).length;
   },
 
   setError(error: Error | null) {
@@ -44,32 +108,16 @@ export const mockDiscordService = {
     mockErrorNotificationError = error;
   },
 
-  getNotifications(): NotificationEntry[] {
-    return mockNotifications;
-  },
-
-  getNotificationCount(): number {
-    return mockNotifications.length;
+  getNotificationsByType(type: "signup" | "error" | "custom"): NotificationEntry[] {
+    if (!currentTestId) {
+      return mockNotifications.filter((n) => n.type === type);
+    }
+    return mockNotifications.filter((n) => n.type === type && n.testId === currentTestId);
   },
 
   getLastNotification(): NotificationEntry | undefined {
-    return mockNotifications[mockNotifications.length - 1];
-  },
-
-  // Get notifications by type
-  getNotificationsByType(type: "signup" | "error" | "custom"): NotificationEntry[] {
-    return mockNotifications.filter((n) => n.type === type);
-  },
-
-  // Mock implementation
-  sendDiscordNotification: async (payload: unknown) => {
-    if (mockError) throw mockError;
-
-    mockNotifications.push({
-      type: "custom",
-      payload,
-      timestamp: Date.now(),
-    });
+    const notifications = this.getNotifications();
+    return notifications[notifications.length - 1];
   },
 
   sendSignupNotification: async (
@@ -82,6 +130,12 @@ export const mockDiscordService = {
     },
     webhookUrl?: string,
   ) => {
+    callCount++; // Increment global call count
+    callCountSinceReset++; // Increment test-scoped call count
+
+    // Capture test ID at CALL time, not EXECUTION time
+    const capturedTestId = currentTestId;
+
     // Skip if webhook URL not configured (mimics production behavior)
     if (!webhookUrl) {
       return;
@@ -108,7 +162,7 @@ export const mockDiscordService = {
         fields.push({ name: "Tags", value: data.tags.join(", "), inline: false });
       }
 
-      mockNotifications.push({
+      const notification: NotificationEntry = {
         type: "signup",
         payload: {
           username: "Signup Bot",
@@ -123,10 +177,21 @@ export const mockDiscordService = {
           ],
         },
         timestamp: Date.now(),
-      });
+        testId: capturedTestId, // Use captured test ID from call time
+      };
+
+      mockNotifications.push(notification);
     })();
 
-    pendingPromises.push(promise);
+    // Track promise with a unique ID
+    const promiseId = `signup-${Date.now()}-${Math.random()}`;
+    pendingPromises.set(promiseId, promise);
+
+    // When promise completes, remove it from the map
+    promise.finally(() => {
+      pendingPromises.delete(promiseId);
+    });
+
     return promise;
   },
 
@@ -134,6 +199,9 @@ export const mockDiscordService = {
     data: { message: string; context?: Record<string, unknown> },
     webhookUrl?: string,
   ) => {
+    // Capture test ID at CALL time, not EXECUTION time
+    const capturedTestId = currentTestId;
+
     // Skip if webhook URL not configured (mimics production behavior)
     if (!webhookUrl) {
       return;
@@ -164,19 +232,26 @@ export const mockDiscordService = {
         }));
       }
 
-      mockNotifications.push({
+      const notification: NotificationEntry = {
         type: "error",
         payload: {
           username: "Signup Bot",
           embeds: [embed],
         },
         timestamp: Date.now(),
-      });
+        testId: capturedTestId, // Use captured test ID from call time
+      };
+
+      mockNotifications.push(notification);
     })();
 
-    pendingPromises.push(promise);
+    const promiseId = `error-${Date.now()}-${Math.random()}`;
+    pendingPromises.set(promiseId, promise);
+
+    promise.finally(() => {
+      pendingPromises.delete(promiseId);
+    });
+
     return promise;
   },
 };
-
-export { mockNotifications, mockError };

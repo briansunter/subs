@@ -21,7 +21,7 @@ let mockWriteError: Error | null = null;
 
 // Operation history tracking (optional, disabled by default for performance)
 interface OperationEntry {
-  operation: "initializeSheetTab" | "appendSignup" | "emailExists" | "getSignupStats";
+  operation: "initializeSheetTab" | "appendSignup" | "emailExists";
   timestamp: number;
   data?: Record<string, unknown>;
 }
@@ -104,15 +104,18 @@ export const mockSheetsService = {
     }
   },
 
-  appendSignup: async (data: {
-    email: string;
-    timestamp: string;
-    sheetTab: string;
-    source?: string;
-    name?: string;
-    tags?: string[];
-    metadata?: string;
-  }, _config: unknown) => {
+  appendSignup: async (
+    data: {
+      email: string;
+      timestamp: string;
+      sheetTab: string;
+      source?: string;
+      name?: string;
+      tags?: string[];
+      metadata?: string;
+    },
+    _config: unknown,
+  ) => {
     if (enableOperationLogging) {
       operationLog.push({
         operation: "appendSignup",
@@ -162,31 +165,6 @@ export const mockSheetsService = {
     }
 
     return false;
-  },
-
-  getSignupStats: async (sheetTab: string | undefined, _config: unknown) => {
-    if (enableOperationLogging) {
-      operationLog.push({
-        operation: "getSignupStats",
-        timestamp: Date.now(),
-        data: { sheetTab },
-      });
-    }
-
-    if (mockAuthError) throw mockAuthError;
-
-    const tabs = sheetTab ? [sheetTab] : Array.from(mockSheetData.keys());
-    let totalSignups = 0;
-
-    for (const tab of tabs) {
-      const rows = mockSheetData.get(tab) || [];
-      totalSignups += rows.length;
-    }
-
-    return {
-      totalSignups,
-      sheetTabs: Array.from(mockSheetData.keys()),
-    };
   },
 };
 

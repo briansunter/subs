@@ -150,7 +150,11 @@ export async function appendSignup(
 /**
  * Check if email already exists in any sheet tab
  */
-export async function emailExists(email: string, sheetTab: string | undefined, config: SignupConfig): Promise<boolean> {
+export async function emailExists(
+  email: string,
+  sheetTab: string | undefined,
+  config: SignupConfig,
+): Promise<boolean> {
   try {
     const sheets = await getSheetsClient(config);
 
@@ -201,39 +205,5 @@ async function getAllSheetTabs(config: SignupConfig): Promise<string[]> {
   } catch (error) {
     logger.error({ error }, "Failed to get sheet tabs");
     return [config.defaultSheetTab];
-  }
-}
-
-/**
- * Get signup statistics
- */
-export async function getSignupStats(sheetTab: string | undefined, config: SignupConfig): Promise<{
-  totalSignups: number;
-  sheetTabs: string[];
-}> {
-  try {
-    const sheets = await getSheetsClient(config);
-    const tabs = sheetTab ? [sheetTab] : await getAllSheetTabs(config);
-
-    let totalSignups = 0;
-
-    for (const tab of tabs) {
-      const result = await sheets.spreadsheets.values.get({
-        spreadsheetId: config.googleSheetId,
-        range: `${tab}!A:A`,
-      });
-
-      // Subtract 1 for header row
-      const rowCount = (result.data.values?.length || 0) - 1;
-      totalSignups += Math.max(0, rowCount);
-    }
-
-    return {
-      totalSignups,
-      sheetTabs: await getAllSheetTabs(config),
-    };
-  } catch (error) {
-    logger.error({ error }, "Failed to get signup stats");
-    throw new Error("Failed to get signup statistics");
   }
 }

@@ -184,18 +184,6 @@ describe("Health Check - Edge Cases (inject)", () => {
 });
 
 describe("Health Check - Service Dependencies (inject)", () => {
-  test("should verify stats endpoint exists", async () => {
-    const app = await getTestApp();
-
-    const response = await app.inject({
-      method: "GET",
-      url: "/api/stats",
-    });
-
-    // Will fail auth but endpoint is reachable
-    expect([200, 500]).toContain(response.statusCode);
-  });
-
   test("should include status in health check", async () => {
     const app = await getTestApp();
 

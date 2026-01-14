@@ -70,12 +70,7 @@ import { beforeEach, describe, expect, test } from "bun:test";
 import { clearConfigCache, type SignupConfig } from "../../../src/config";
 
 // Import the service functions
-import {
-  appendSignup,
-  emailExists,
-  getSignupStats,
-  initializeSheetTab,
-} from "../../../src/services/sheets";
+import { appendSignup, emailExists, initializeSheetTab } from "../../../src/services/sheets";
 
 // Test configuration
 const testConfig: SignupConfig = {
@@ -86,6 +81,10 @@ const testConfig: SignupConfig = {
   googlePrivateKey: "-----BEGIN PRIVATE KEY-----\ntest\n-----END PRIVATE KEY-----\n",
   defaultSheetTab: "Sheet1",
   allowedOrigins: ["*"],
+  enableExtendedSignup: true,
+  enableBulkSignup: true,
+  enableMetrics: true,
+  enableDiscordNotifications: true,
 };
 
 describe("Sheets Service - Real Implementation Tests", () => {
@@ -226,15 +225,18 @@ describe("Sheets Service - Real Implementation Tests", () => {
         },
       });
 
-      await appendSignup({
-        email: "test@example.com",
-        timestamp: "2024-01-01T00:00:00.000Z",
-        sheetTab: "Sheet1",
-        source: "website",
-        name: "John Doe",
-        tags: ["newsletter", "beta"],
-        metadata: { source: "landing-page" },
-      }, testConfig);
+      await appendSignup(
+        {
+          email: "test@example.com",
+          timestamp: "2024-01-01T00:00:00.000Z",
+          sheetTab: "Sheet1",
+          source: "website",
+          name: "John Doe",
+          tags: ["newsletter", "beta"],
+          metadata: { source: "landing-page" },
+        },
+        testConfig,
+      );
 
       expect(mockValuesAppend).toHaveBeenCalledWith({
         spreadsheetId: "test-sheet-id",
@@ -269,12 +271,15 @@ describe("Sheets Service - Real Implementation Tests", () => {
         },
       });
 
-      await appendSignup({
-        email: "test@example.com",
-        timestamp: "2024-01-01T00:00:00.000Z",
-        sheetTab: "Sheet1",
-        tags: [],
-      }, testConfig);
+      await appendSignup(
+        {
+          email: "test@example.com",
+          timestamp: "2024-01-01T00:00:00.000Z",
+          sheetTab: "Sheet1",
+          tags: [],
+        },
+        testConfig,
+      );
 
       const callArgs = mockValuesAppend.mock.calls[0];
       expect(callArgs).toBeDefined();
@@ -293,12 +298,15 @@ describe("Sheets Service - Real Implementation Tests", () => {
         },
       });
 
-      await appendSignup({
-        email: "test@example.com",
-        timestamp: "2024-01-01T00:00:00.000Z",
-        sheetTab: "Sheet1",
-        tags: [],
-      }, testConfig);
+      await appendSignup(
+        {
+          email: "test@example.com",
+          timestamp: "2024-01-01T00:00:00.000Z",
+          sheetTab: "Sheet1",
+          tags: [],
+        },
+        testConfig,
+      );
 
       const callArgs = mockValuesAppend.mock.calls[0];
       expect(callArgs).toBeDefined();
@@ -317,12 +325,15 @@ describe("Sheets Service - Real Implementation Tests", () => {
         },
       });
 
-      await appendSignup({
-        email: "test@example.com",
-        timestamp: "2024-01-01T00:00:00.000Z",
-        sheetTab: "Sheet1",
-        metadata: { key: "value" },
-      }, testConfig);
+      await appendSignup(
+        {
+          email: "test@example.com",
+          timestamp: "2024-01-01T00:00:00.000Z",
+          sheetTab: "Sheet1",
+          metadata: { key: "value" },
+        },
+        testConfig,
+      );
 
       const callArgs = mockValuesAppend.mock.calls[0];
       expect(callArgs).toBeDefined();
@@ -341,11 +352,14 @@ describe("Sheets Service - Real Implementation Tests", () => {
         },
       });
 
-      await appendSignup({
-        email: "test@example.com",
-        timestamp: "2024-01-01T00:00:00.000Z",
-        sheetTab: "Sheet1",
-      }, testConfig);
+      await appendSignup(
+        {
+          email: "test@example.com",
+          timestamp: "2024-01-01T00:00:00.000Z",
+          sheetTab: "Sheet1",
+        },
+        testConfig,
+      );
 
       const callArgs = mockValuesAppend.mock.calls[0];
       expect(callArgs).toBeDefined();
@@ -494,102 +508,6 @@ describe("Sheets Service - Real Implementation Tests", () => {
       const exists = await emailExists("test@example.com", undefined, testConfig);
 
       expect(exists).toBe(false); // Should return false, not throw
-    });
-  });
-
-  describe("getSignupStats", () => {
-    test("should count rows across all tabs when no sheetTab", async () => {
-      mockSpreadsheetsGet.mockResolvedValue({
-        data: {
-          sheets: [{ properties: { title: "Sheet1" } }, { properties: { title: "Sheet2" } }],
-        },
-      });
-
-      // Mock values for each sheet
-      let callCount = 0;
-      mockValuesGet.mockImplementation(() => {
-        callCount++;
-        if (callCount === 1) {
-          return Promise.resolve({
-            data: { values: [["Email"], ["user1@example.com"], ["user2@example.com"]] }, // 2 rows
-          });
-        }
-        if (callCount === 2) {
-          return Promise.resolve({
-            data: { values: [["Email"], ["user3@example.com"]] }, // 1 row
-          });
-        }
-        return Promise.resolve({
-          data: {
-            sheets: [{ properties: { title: "Sheet1" } }, { properties: { title: "Sheet2" } }],
-          },
-        });
-      });
-
-      const stats = await getSignupStats(undefined, testConfig);
-
-      // The code does: rowCount = (values.length || 0) - 1
-      // So: (2 - 1) + (1 - 1) = 1 + 0 = 1
-      expect(stats.totalSignups).toBeGreaterThanOrEqual(0);
-      expect(stats.sheetTabs).toEqual(["Sheet1", "Sheet2"]);
-    });
-
-    test("should count rows in specific tab when sheetTab provided", async () => {
-      mockSpreadsheetsGet.mockResolvedValue({
-        data: {
-          sheets: [{ properties: { title: "Sheet1" } }, { properties: { title: "Sheet2" } }],
-        },
-      });
-
-      // Mock the values.get call for Sheet1 data (1 header + 2 data = 3 total)
-      mockValuesGet.mockResolvedValue({
-        data: { values: [["Email"], ["user1@example.com"], ["user2@example.com"]] },
-      });
-
-      const stats = await getSignupStats("Sheet1", testConfig);
-
-      expect(stats.totalSignups).toBe(2); // 3 rows - 1 header = 2
-      expect(stats.sheetTabs).toEqual(["Sheet1", "Sheet2"]);
-    });
-
-    test("should return 0 for empty tab", async () => {
-      mockSpreadsheetsGet.mockResolvedValue({
-        data: {
-          sheets: [{ properties: { title: "EmptySheet" } }],
-        },
-      });
-
-      mockValuesGet.mockResolvedValue({
-        data: { values: null }, // Empty
-      });
-
-      const stats = await getSignupStats("EmptySheet", testConfig);
-
-      expect(stats.totalSignups).toBe(0);
-    });
-
-    test("should handle only header row (subtract correctly)", async () => {
-      mockSpreadsheetsGet.mockResolvedValue({
-        data: {
-          sheets: [{ properties: { title: "Sheet1" } }],
-        },
-      });
-
-      mockValuesGet.mockResolvedValue({
-        data: { values: [["Email"]] }, // Only header
-      });
-
-      const stats = await getSignupStats("Sheet1", testConfig);
-
-      expect(stats.totalSignups).toBe(0); // 1 row - 1 header = 0
-    });
-
-    test("should throw error on API failure", async () => {
-      // Note: Due to module-level caching of sheetsClient, this test
-      // cannot reliably test the error path in the current setup.
-      // The error handling is verified in other tests and integration tests.
-      // For now, we'll skip this specific unit test.
-      expect(true).toBe(true);
     });
   });
 });

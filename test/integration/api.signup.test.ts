@@ -43,39 +43,6 @@ describe("Signup API Integration Tests", () => {
     });
   });
 
-  describe("GET /api/stats", () => {
-    test("should return stats", async () => {
-      const app = await getTestApp();
-
-      // Add some test data
-      await mockSheetsService.appendSignup({
-        email: "user1@example.com",
-        timestamp: new Date().toISOString(),
-        sheetTab: "Sheet1",
-      }, {} as any);
-
-      const response = await app.inject({
-        method: "GET",
-        url: "/api/stats",
-      });
-
-      // Note: This will fail with auth error due to test credentials
-      // but we can test the endpoint exists
-      expect([200, 500]).toContain(response.statusCode);
-    });
-
-    test("should accept sheetTab query parameter", async () => {
-      const app = await getTestApp();
-
-      const response = await app.inject({
-        method: "GET",
-        url: "/api/stats?sheetTab=Sheet1",
-      });
-
-      expect([200, 500]).toContain(response.statusCode);
-    });
-  });
-
   describe("POST /api/signup", () => {
     test("should validate email format", async () => {
       const app = await getTestApp();

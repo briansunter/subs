@@ -7,10 +7,14 @@
 
 import { beforeEach, describe, expect, test } from "bun:test";
 import { register } from "../../src/services/metrics";
-import { getTestApp } from "../helpers/test-app";
+import { clearConfigCache, DEFAULT_TEST_ENV, getTestApp, setTestEnv } from "../helpers/test-app";
 import { mockDiscordService } from "../mocks/discord";
 import { mockSheetsService } from "../mocks/sheets";
 import { mockTurnstileService } from "../mocks/turnstile";
+
+// Setup environment variables for all tests
+setTestEnv(DEFAULT_TEST_ENV);
+clearConfigCache();
 
 // Global setup for all tests in this file
 beforeEach(async () => {
@@ -132,6 +136,7 @@ describe("Sheets API Metrics", () => {
 describe("Discord Webhook Metrics", () => {
   test("should record successful webhook notification", async () => {
     const app = await getTestApp();
+    mockTurnstileService.setSuccess();
 
     await app.inject({
       method: "POST",

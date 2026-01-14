@@ -55,7 +55,6 @@ export async function getTestApp() {
     sheets: {
       appendSignup: mockSheetsService.appendSignup,
       emailExists: mockSheetsService.emailExists,
-      getSignupStats: mockSheetsService.getSignupStats,
     },
     discord: {
       sendSignupNotification: mockDiscordService.sendSignupNotification,
@@ -103,11 +102,15 @@ export const DEFAULT_TEST_ENV = {
   GOOGLE_CREDENTIALS_EMAIL: "test@example.com",
   GOOGLE_PRIVATE_KEY: "-----BEGIN PRIVATE KEY-----\ntest\n-----END PRIVATE KEY-----\n",
   ALLOWED_ORIGINS: "*",
-  DISCORD_WEBHOOK_URL: "",
+  DISCORD_WEBHOOK_URL: "https://discord.com/api/webhooks/test",
   PORT: "3011",
   HOST: "0.0.0.0",
   CLOUDFLARE_TURNSTILE_SECRET_KEY: "1x0000000000000000000000000000000AA",
   CLOUDFLARE_TURNSTILE_SITE_KEY: "1x0000000000000000000000000000000AA",
+  ENABLE_EXTENDED_SIGNUP: "true",
+  ENABLE_BULK_SIGNUP: "true",
+  ENABLE_METRICS: "true",
+  ENABLE_DISCORD_NOTIFICATIONS: "true",
 } as const;
 
 /**

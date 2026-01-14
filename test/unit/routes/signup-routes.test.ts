@@ -6,10 +6,28 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import type { FastifyInstance } from "fastify";
 import Fastify from "fastify";
+import type { SignupConfig } from "../../../src/config";
 import type { SignupContext } from "../../../src/routes/handlers";
 import { signupRoutes } from "../../../src/routes/signup";
 import { mockDiscordService } from "../../mocks/discord";
 import { mockSheetsService } from "../../mocks/sheets";
+import { mockTurnstileService } from "../../mocks/turnstile";
+
+// Test configuration
+const testConfig: SignupConfig = {
+  port: 3000,
+  host: "0.0.0.0",
+  googleSheetId: "test-sheet-id",
+  googleCredentialsEmail: "test@example.com",
+  googlePrivateKey: "-----BEGIN PRIVATE KEY-----\ntest\n-----END PRIVATE KEY-----\n",
+  defaultSheetTab: "Sheet1",
+  allowedOrigins: ["*"],
+  discordWebhookUrl: "https://discord.com/api/webhooks/test",
+  enableExtendedSignup: true,
+  enableBulkSignup: true,
+  enableMetrics: true,
+  enableDiscordNotifications: true,
+};
 
 describe("Signup Routes - Unit Tests", () => {
   let fastify: FastifyInstance;
@@ -19,6 +37,7 @@ describe("Signup Routes - Unit Tests", () => {
     // Reset all mocks
     mockSheetsService.reset();
     mockDiscordService.reset();
+    mockTurnstileService.reset();
 
     // Enable operation logging for tests that need to verify calls
     mockSheetsService.enableOperationLogging();
@@ -28,16 +47,15 @@ describe("Signup Routes - Unit Tests", () => {
       sheets: {
         appendSignup: mockSheetsService.appendSignup,
         emailExists: mockSheetsService.emailExists,
-        getSignupStats: mockSheetsService.getSignupStats,
       },
       discord: {
         sendSignupNotification: mockDiscordService.sendSignupNotification,
         sendErrorNotification: mockDiscordService.sendErrorNotification,
       },
-      config: {
-        defaultSheetTab: "Sheet1",
-        discordWebhookUrl: "https://discord.com/api/webhooks/test",
+      turnstile: {
+        verifyTurnstileToken: mockTurnstileService.verifyTurnstileToken,
       },
+      config: testConfig,
     };
 
     // Create Fastify instance and register routes with /api prefix
@@ -152,49 +170,6 @@ describe("Signup Routes - Unit Tests", () => {
     });
   });
 
-  describe("GET /stats", () => {
-    test("should return stats without sheetTab query", async () => {
-      const response = await fastify.inject({
-        method: "GET",
-        url: "/api/stats",
-      });
-
-      expect(response.statusCode).toBe(200);
-      const payload = JSON.parse(response.payload);
-      expect(payload.success).toBe(true);
-      expect(payload.data).toBeDefined();
-      expect(payload.data.totalSignups).toBe(0); // No signups yet
-    });
-
-    test("should return stats with sheetTab query", async () => {
-      const response = await fastify.inject({
-        method: "GET",
-        url: "/api/stats?sheetTab=Sheet1",
-      });
-
-      expect(response.statusCode).toBe(200);
-      const payload = JSON.parse(response.payload);
-      expect(payload.success).toBe(true);
-      expect(payload.data).toBeDefined();
-      // Verify getSignupStats was called with the sheetTab
-      expect(mockSheetsService.countOperations("getSignupStats")).toBeGreaterThan(0);
-    });
-
-    test("should return error response when service fails", async () => {
-      mockSheetsService.setAuthError(new Error("Stats failed"));
-
-      const response = await fastify.inject({
-        method: "GET",
-        url: "/api/stats",
-      });
-
-      expect(response.statusCode).toBe(500);
-      const payload = JSON.parse(response.payload);
-      expect(payload.success).toBe(false);
-      expect(payload.error).toBeDefined();
-    });
-  });
-
   describe("POST /signup", () => {
     test("should return 200 for valid email", async () => {
       const response = await fastify.inject({
@@ -263,11 +238,14 @@ describe("Signup Routes - Unit Tests", () => {
 
     test("should return 409 for email that already exists", async () => {
       // First, add an email to the mock data
-      await mockSheetsService.appendSignup({
-        email: "existing@example.com",
-        timestamp: new Date().toISOString(),
-        sheetTab: "Sheet1",
-      }, {} as any);
+      await mockSheetsService.appendSignup(
+        {
+          email: "existing@example.com",
+          timestamp: new Date().toISOString(),
+          sheetTab: "Sheet1",
+        },
+        {} as any,
+      );
 
       const response = await fastify.inject({
         method: "POST",
@@ -458,16 +436,22 @@ describe("Signup Routes - Unit Tests", () => {
 
     test("should track failed signups", async () => {
       // First, add emails to the mock data (they already exist)
-      await mockSheetsService.appendSignup({
-        email: "user1@example.com",
-        timestamp: new Date().toISOString(),
-        sheetTab: "Sheet1",
-      }, {} as any);
-      await mockSheetsService.appendSignup({
-        email: "user2@example.com",
-        timestamp: new Date().toISOString(),
-        sheetTab: "Sheet1",
-      }, {} as any);
+      await mockSheetsService.appendSignup(
+        {
+          email: "user1@example.com",
+          timestamp: new Date().toISOString(),
+          sheetTab: "Sheet1",
+        },
+        {} as any,
+      );
+      await mockSheetsService.appendSignup(
+        {
+          email: "user2@example.com",
+          timestamp: new Date().toISOString(),
+          sheetTab: "Sheet1",
+        },
+        {} as any,
+      );
 
       const response = await fastify.inject({
         method: "POST",
@@ -501,11 +485,14 @@ describe("Signup Routes - Unit Tests", () => {
 
     test("should handle mixed success and failure", async () => {
       // Add one existing email
-      await mockSheetsService.appendSignup({
-        email: "user1@example.com",
-        timestamp: new Date().toISOString(),
-        sheetTab: "Sheet1",
-      }, {} as any);
+      await mockSheetsService.appendSignup(
+        {
+          email: "user1@example.com",
+          timestamp: new Date().toISOString(),
+          sheetTab: "Sheet1",
+        },
+        {} as any,
+      );
 
       const response = await fastify.inject({
         method: "POST",

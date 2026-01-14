@@ -315,20 +315,24 @@ describe.serial("Security Tests - Integration", () => {
       const app = await getTestApp();
 
       const maliciousQueries = [
-        "?sheetTab=../../../etc/passwd",
-        "?sheetTab=<script>alert('xss')</script>",
-        "?sheetTab=' OR '1'='1",
-        "?sheetTab=1; DROP TABLE users--",
+        "?injected=test",
+        "?injected=<script>alert('xss')</script>",
+        "?injected=' OR '1'='1",
+        "?injected=1; DROP TABLE users--",
       ];
 
-      for (const query of maliciousQueries) {
+      for (let i = 0; i < maliciousQueries.length; i++) {
         const response = await app.inject({
-          method: "GET",
-          url: `/api/stats${query}`,
+          method: "POST",
+          url: `/api/signup${maliciousQueries[i]}`,
+          payload: {
+            email: `query-injection-test-${i}@example.com`,
+            turnstileToken: VALID_TURNSTILE_TOKEN,
+          },
         });
 
         // Should handle safely
-        expect([200, 400, 500]).toContain(response.statusCode);
+        expect([200, 400, 409, 500]).toContain(response.statusCode);
       }
     });
   });

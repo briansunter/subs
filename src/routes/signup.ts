@@ -14,7 +14,6 @@ import {
   createDefaultContext,
   handleBulkSignup,
   handleExtendedSignup,
-  handleGetStats,
   handleHealthCheck,
   handleSignup,
   type SignupContext,
@@ -106,32 +105,11 @@ export async function signupRoutes(fastify: FastifyInstance, options: SignupRout
    * Prometheus metrics endpoint
    * Exposes metrics for Prometheus scraping
    */
-  fastify.get("/metrics", async (_request, reply) => {
-    reply.type("text/plain").send(await register.metrics());
-  });
-
-  /**
-   * Get signup statistics
-   */
-  fastifyZod.get(
-    "/stats",
-    {
-      schema: {
-        querystring: signupSchema.pick({ sheetTab: true }).partial(),
-      },
-    } as const,
-    async (request, reply) => {
-      const { sheetTab } = request.query;
-      const result = await handleGetStats(sheetTab, context);
-      return reply
-        .code(result.statusCode)
-        .send(
-          result.statusCode === 200
-            ? { success: result.success, data: result.data }
-            : { success: result.success, error: result.error },
-        );
-    },
-  );
+  if (context.config.enableMetrics) {
+    fastify.get("/metrics", async (_request, reply) => {
+      reply.type("text/plain").send(await register.metrics());
+    });
+  }
 
   /**
    * Basic signup endpoint - email only
@@ -152,32 +130,36 @@ export async function signupRoutes(fastify: FastifyInstance, options: SignupRout
   /**
    * Extended signup endpoint - with additional fields
    */
-  fastifyZod.post(
-    "/signup/extended",
-    {
-      schema: {
-        body: extendedSignupSchema,
+  if (context.config.enableExtendedSignup) {
+    fastifyZod.post(
+      "/signup/extended",
+      {
+        schema: {
+          body: extendedSignupSchema,
+        },
       },
-    },
-    async (request, reply) => {
-      const result = await handleExtendedSignup(request.body, context);
-      return reply.code(result.statusCode).send(result);
-    },
-  );
+      async (request, reply) => {
+        const result = await handleExtendedSignup(request.body, context);
+        return reply.code(result.statusCode).send(result);
+      },
+    );
+  }
 
   /**
    * Bulk signup endpoint
    */
-  fastifyZod.post(
-    "/signup/bulk",
-    {
-      schema: {
-        body: bulkSignupSchema,
+  if (context.config.enableBulkSignup) {
+    fastifyZod.post(
+      "/signup/bulk",
+      {
+        schema: {
+          body: bulkSignupSchema,
+        },
       },
-    },
-    async (request, reply) => {
-      const result = await handleBulkSignup(request.body, context);
-      return reply.code(result.statusCode).send(result);
-    },
-  );
+      async (request, reply) => {
+        const result = await handleBulkSignup(request.body, context);
+        return reply.code(result.statusCode).send(result);
+      },
+    );
+  }
 }

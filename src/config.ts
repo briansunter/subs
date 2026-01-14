@@ -37,6 +37,24 @@ const envSchema = z.object({
   // Node environment
   NODE_ENV: z.string().default("development"),
   LOG_LEVEL: z.string().default("info"),
+
+  // Feature flags
+  ENABLE_EXTENDED_SIGNUP: z
+    .string()
+    .default("true")
+    .transform((val) => val.toLowerCase() === "true"),
+  ENABLE_BULK_SIGNUP: z
+    .string()
+    .default("true")
+    .transform((val) => val.toLowerCase() === "true"),
+  ENABLE_METRICS: z
+    .string()
+    .default("true")
+    .transform((val) => val.toLowerCase() === "true"),
+  ENABLE_DISCORD_NOTIFICATIONS: z
+    .string()
+    .default("true")
+    .transform((val) => val.toLowerCase() === "true"),
 });
 
 export interface SignupConfig {
@@ -59,6 +77,12 @@ export interface SignupConfig {
 
   // CORS
   allowedOrigins: string[];
+
+  // Feature flags
+  enableExtendedSignup: boolean;
+  enableBulkSignup: boolean;
+  enableMetrics: boolean;
+  enableDiscordNotifications: boolean;
 }
 
 function loadEnv(): SignupConfig {
@@ -79,6 +103,10 @@ function loadEnv(): SignupConfig {
     turnstileSecretKey: env.CLOUDFLARE_TURNSTILE_SECRET_KEY,
     turnstileSiteKey: env.CLOUDFLARE_TURNSTILE_SITE_KEY,
     allowedOrigins: env.ALLOWED_ORIGINS,
+    enableExtendedSignup: env.ENABLE_EXTENDED_SIGNUP,
+    enableBulkSignup: env.ENABLE_BULK_SIGNUP,
+    enableMetrics: env.ENABLE_METRICS,
+    enableDiscordNotifications: env.ENABLE_DISCORD_NOTIFICATIONS,
   };
 }
 

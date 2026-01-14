@@ -7,13 +7,13 @@ import { beforeEach, describe, expect, test } from "bun:test";
 import {
   handleBulkSignup,
   handleExtendedSignup,
-  handleGetStats,
   handleHealthCheck,
   handleSignup,
   type SignupContext,
 } from "../../../src/routes/handlers";
 import { mockDiscordService } from "../../mocks/discord";
 import { mockSheetsService } from "../../mocks/sheets";
+import { mockTurnstileService } from "../../mocks/turnstile";
 
 // Type guards for test data
 function isHealthCheckData(data: unknown): data is { status: string; timestamp: string } {
@@ -24,17 +24,6 @@ function isHealthCheckData(data: unknown): data is { status: string; timestamp: 
     "timestamp" in data &&
     typeof data.status === "string" &&
     typeof data.timestamp === "string"
-  );
-}
-
-function isStatsData(data: unknown): data is { totalSignups: number; sheetTabs: string[] } {
-  return (
-    typeof data === "object" &&
-    data !== null &&
-    "totalSignups" in data &&
-    "sheetTabs" in data &&
-    typeof data.totalSignups === "number" &&
-    Array.isArray(data.sheetTabs)
   );
 }
 
@@ -77,21 +66,34 @@ describe("Route Handlers - Unit Tests", () => {
   beforeEach(() => {
     mockSheetsService.reset();
     mockDiscordService.reset();
+    mockTurnstileService.reset();
 
     // Create test context with mocked services
     mockContext = {
       sheets: {
         appendSignup: mockSheetsService.appendSignup,
         emailExists: mockSheetsService.emailExists,
-        getSignupStats: mockSheetsService.getSignupStats,
       },
       discord: {
         sendSignupNotification: mockDiscordService.sendSignupNotification,
         sendErrorNotification: mockDiscordService.sendErrorNotification,
       },
+      turnstile: {
+        verifyTurnstileToken: mockTurnstileService.verifyTurnstileToken,
+      },
       config: {
         defaultSheetTab: "Sheet1",
         discordWebhookUrl: "https://discord.com/api/webhooks/test",
+        port: 3000,
+        host: "0.0.0.0",
+        googleSheetId: "test-sheet-id",
+        googleCredentialsEmail: "test@example.com",
+        googlePrivateKey: "-----BEGIN PRIVATE KEY-----\ntest\n-----END PRIVATE KEY-----\n",
+        allowedOrigins: ["*"],
+        enableExtendedSignup: true,
+        enableBulkSignup: true,
+        enableMetrics: true,
+        enableDiscordNotifications: true,
       },
     };
   });
@@ -401,50 +403,6 @@ describe("Route Handlers - Unit Tests", () => {
     });
   });
 
-  describe("handleGetStats", () => {
-    test("should return stats for all sheets", async () => {
-      // Add some test data
-      await handleSignup({ email: "user1@example.com", sheetTab: "Sheet1" }, mockContext);
-      await handleSignup({ email: "user2@example.com", sheetTab: "Sheet2" }, mockContext);
-
-      const result = await handleGetStats(undefined, mockContext);
-
-      expect(result.success).toBe(true);
-      expect(result.statusCode).toBe(200);
-
-      expect(isStatsData(result.data)).toBe(true);
-      if (isStatsData(result.data)) {
-        expect(result.data.totalSignups).toBe(2);
-        expect(result.data.sheetTabs).toContain("Sheet1");
-        expect(result.data.sheetTabs).toContain("Sheet2");
-      }
-    });
-
-    test("should return stats for specific sheet tab", async () => {
-      await handleSignup({ email: "user1@example.com", sheetTab: "Sheet1" }, mockContext);
-      await handleSignup({ email: "user2@example.com", sheetTab: "Sheet2" }, mockContext);
-
-      const result = await handleGetStats("Sheet1", mockContext);
-
-      expect(result.success).toBe(true);
-      expect(result.statusCode).toBe(200);
-
-      if (isStatsData(result.data)) {
-        expect(result.data.totalSignups).toBe(1);
-      }
-    });
-
-    test("should handle sheets errors gracefully", async () => {
-      mockSheetsService.setAuthError(new Error("Auth error"));
-
-      const result = await handleGetStats(undefined, mockContext);
-
-      expect(result.success).toBe(false);
-      expect(result.statusCode).toBe(500);
-      expect(result.error).toContain("Failed to retrieve");
-    });
-  });
-
   describe("Error Handling", () => {
     test("should handle discord notification errors gracefully", async () => {
       // Set Discord error but signup should still succeed
@@ -541,35 +499,6 @@ describe("Route Handlers - Unit Tests", () => {
 
       const sheetData = mockSheetsService.getSheetData("Sheet1");
       expect(sheetData).toHaveLength(4); // exists + new1 + new2 + new3
-    });
-
-    test("should handle concurrent stats requests", async () => {
-      // Add some data
-      await handleBulkSignup(
-        {
-          signups: Array.from({ length: 10 }, (_, i) => ({
-            email: `user${i}@example.com`,
-            sheetTab: "Sheet1",
-          })),
-        },
-        mockContext,
-      );
-
-      // Request stats concurrently
-      const statsResults = await Promise.all([
-        handleGetStats(undefined, mockContext),
-        handleGetStats("Sheet1", mockContext),
-        handleGetStats(undefined, mockContext),
-        handleGetStats("Sheet1", mockContext),
-      ]);
-
-      expect(statsResults).toHaveLength(4);
-      expect(statsResults.every((r) => r.success)).toBe(true);
-
-      // All should return consistent data
-      if (isStatsData(statsResults[0].data)) {
-        expect(statsResults[0].data.totalSignups).toBe(10);
-      }
     });
 
     test("should handle concurrent signups to different tabs", async () => {
@@ -757,19 +686,32 @@ describe("Route Handlers - Unit Tests", () => {
     beforeEach(() => {
       mockSheetsService.reset();
       mockDiscordService.reset();
+      mockTurnstileService.reset();
       mockContext = {
         sheets: {
           appendSignup: mockSheetsService.appendSignup,
           emailExists: mockSheetsService.emailExists,
-          getSignupStats: mockSheetsService.getSignupStats,
         },
         discord: {
           sendSignupNotification: mockDiscordService.sendSignupNotification,
           sendErrorNotification: mockDiscordService.sendErrorNotification,
         },
+        turnstile: {
+          verifyTurnstileToken: mockTurnstileService.verifyTurnstileToken,
+        },
         config: {
           defaultSheetTab: "Sheet1",
           discordWebhookUrl: "https://discord.com/api/webhooks/test",
+          port: 3000,
+          host: "0.0.0.0",
+          googleSheetId: "test-sheet-id",
+          googleCredentialsEmail: "test@example.com",
+          googlePrivateKey: "-----BEGIN PRIVATE KEY-----\ntest\n-----END PRIVATE KEY-----\n",
+          allowedOrigins: ["*"],
+          enableExtendedSignup: true,
+          enableBulkSignup: true,
+          enableMetrics: true,
+          enableDiscordNotifications: true,
         },
       };
     });

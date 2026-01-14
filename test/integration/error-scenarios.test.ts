@@ -6,20 +6,27 @@
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import {
+  clearConfigCache,
+  DEFAULT_TEST_ENV,
   getTestApp,
   mockDiscordService,
   mockSheetsService,
   mockTurnstileService,
   register,
+  setTestEnv,
   VALID_TURNSTILE_TOKEN,
 } from "../helpers/test-app";
 import type { ApiResponse } from "../types";
+
+// Setup environment variables for all tests
+setTestEnv(DEFAULT_TEST_ENV);
+clearConfigCache();
 
 describe.serial("Error Scenarios - Fastify Inject Tests", () => {
   beforeEach(async () => {
     register.resetMetrics();
     mockSheetsService.reset();
-    mockDiscordService.reset();
+    await mockDiscordService.reset();
     mockTurnstileService.reset();
   });
 

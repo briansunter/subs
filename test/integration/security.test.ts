@@ -1,30 +1,25 @@
 /**
  * Security integration tests
  * Tests various security-related scenarios and input validation
- * Uses Fastify inject() for fast testing (except for true concurrency tests)
+ * Uses Elysia's handle() method for fast testing
  */
 
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { beforeEach, describe, expect, test } from "bun:test";
 import {
   getTestApp,
-  mockDiscordService,
   mockSheetsService,
   mockTurnstileService,
+  parseJsonResponse,
   register,
   VALID_TURNSTILE_TOKEN,
-} from "../helpers/test-app";
+} from "../helpers/test-app-elysia";
 import type { ApiResponse } from "../types";
 
 describe.serial("Security Tests - Integration", () => {
   beforeEach(async () => {
     register.resetMetrics();
     mockSheetsService.reset();
-    mockDiscordService.reset();
     mockTurnstileService.reset();
-  });
-
-  afterEach(async () => {
-    await mockDiscordService.waitForPendingNotifications();
   });
 
   describe("Input Sanitization", () => {
@@ -41,16 +36,18 @@ describe.serial("Security Tests - Integration", () => {
       ];
 
       for (const email of testEmails) {
-        const response = await app.inject({
-          method: "POST",
-          url: "/api/signup",
-          payload: { email, turnstileToken: VALID_TURNSTILE_TOKEN },
-        });
+        const response = await app.handle(
+          new Request("http://localhost/api/signup", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email, turnstileToken: VALID_TURNSTILE_TOKEN }),
+          }),
+        );
 
         // Should accept valid emails
-        expect([200, 500]).toContain(response.statusCode);
-        if (response.statusCode === 400) {
-          const data = response.json() as ApiResponse;
+        expect([200, 500]).toContain(response.status);
+        if (response.status === 400) {
+          const data = await parseJsonResponse<ApiResponse>(response);
           // Only acceptable failure is auth error, not validation error
           expect(data.error).not.toBe("Validation failed");
         }
@@ -69,17 +66,19 @@ describe.serial("Security Tests - Integration", () => {
       ];
 
       for (const email of maliciousEmails) {
-        const response = await app.inject({
-          method: "POST",
-          url: "/api/signup",
-          payload: { email, turnstileToken: VALID_TURNSTILE_TOKEN },
-        });
+        const response = await app.handle(
+          new Request("http://localhost/api/signup", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email, turnstileToken: VALID_TURNSTILE_TOKEN }),
+          }),
+        );
 
         // The email validator might reject these as invalid format
         // or accept them (they're stored as strings, not executed)
         // Key is that they don't cause crashes or unexpected behavior
-        expect(response.statusCode).toBeGreaterThanOrEqual(200);
-        expect(response.statusCode).toBeLessThan(600);
+        expect(response.status).toBeGreaterThanOrEqual(200);
+        expect(response.status).toBeLessThan(600);
       }
     });
 
@@ -94,38 +93,42 @@ describe.serial("Security Tests - Integration", () => {
       ];
 
       for (let i = 0; i < xssPayloads.length; i++) {
-        const response = await app.inject({
-          method: "POST",
-          url: "/api/signup",
-          payload: {
-            email: `xss-test-${i}@example.com`,
-            turnstileToken: VALID_TURNSTILE_TOKEN,
-            metadata: xssPayloads[i],
-          },
-        });
+        const response = await app.handle(
+          new Request("http://localhost/api/signup", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              email: `xss-test-${i}@example.com`,
+              turnstileToken: VALID_TURNSTILE_TOKEN,
+              metadata: xssPayloads[i],
+            }),
+          }),
+        );
 
         // Should handle safely - data is stored as JSON string, not rendered
-        expect([200, 409, 500]).toContain(response.statusCode);
+        expect([200, 409, 500]).toContain(response.status);
       }
     });
 
     test("should safely handle script tags in name field", async () => {
       const app = await getTestApp();
 
-      const response = await app.inject({
-        method: "POST",
-        url: "/api/signup/extended",
-        payload: {
-          email: "xss-name@example.com",
-          turnstileToken: VALID_TURNSTILE_TOKEN,
-          name: "<script>alert('xss')</script>",
-          source: "api",
-          tags: [],
-        },
-      });
+      const response = await app.handle(
+        new Request("http://localhost/api/signup/extended", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email: "xss-name@example.com",
+            turnstileToken: VALID_TURNSTILE_TOKEN,
+            name: "<script>alert('xss')</script>",
+            source: "api",
+            tags: [],
+          }),
+        }),
+      );
 
       // Should accept the input (stored as string, not rendered as HTML)
-      expect([200, 500]).toContain(response.statusCode);
+      expect([200, 500]).toContain(response.status);
     });
   });
 
@@ -139,19 +142,21 @@ describe.serial("Security Tests - Integration", () => {
         largeMetadata[`key${i}`] = "x".repeat(1000);
       }
 
-      const response = await app.inject({
-        method: "POST",
-        url: "/api/signup",
-        payload: {
-          email: "large-payload@example.com",
-          turnstileToken: VALID_TURNSTILE_TOKEN,
-          metadata: largeMetadata,
-        },
-      });
+      const response = await app.handle(
+        new Request("http://localhost/api/signup", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email: "large-payload@example.com",
+            turnstileToken: VALID_TURNSTILE_TOKEN,
+            metadata: largeMetadata,
+          }),
+        }),
+      );
 
-      // Fastify has default body size limits
-      expect(response.statusCode).toBeGreaterThanOrEqual(200);
-      expect(response.statusCode).toBeLessThan(600);
+      // Elysia has default body size limits
+      expect(response.status).toBeGreaterThanOrEqual(200);
+      expect(response.status).toBeLessThan(600);
     });
 
     test("should reject deeply nested objects", async () => {
@@ -163,19 +168,21 @@ describe.serial("Security Tests - Integration", () => {
         deepObject = { level: i, nested: deepObject };
       }
 
-      const response = await app.inject({
-        method: "POST",
-        url: "/api/signup",
-        payload: {
-          email: "nested@example.com",
-          turnstileToken: VALID_TURNSTILE_TOKEN,
-          metadata: deepObject,
-        },
-      });
+      const response = await app.handle(
+        new Request("http://localhost/api/signup", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email: "nested@example.com",
+            turnstileToken: VALID_TURNSTILE_TOKEN,
+            metadata: deepObject,
+          }),
+        }),
+      );
 
       // Should handle gracefully
-      expect(response.statusCode).toBeGreaterThanOrEqual(200);
-      expect(response.statusCode).toBeLessThan(600);
+      expect(response.status).toBeGreaterThanOrEqual(200);
+      expect(response.status).toBeLessThan(600);
     });
 
     test("should handle extremely long email address", async () => {
@@ -184,17 +191,19 @@ describe.serial("Security Tests - Integration", () => {
       // Way beyond valid email length
       const tooLongEmail = `${"a".repeat(1000)}@example.com`;
 
-      const response = await app.inject({
-        method: "POST",
-        url: "/api/signup",
-        payload: {
-          email: tooLongEmail,
-          turnstileToken: VALID_TURNSTILE_TOKEN,
-        },
-      });
+      const response = await app.handle(
+        new Request("http://localhost/api/signup", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email: tooLongEmail,
+            turnstileToken: VALID_TURNSTILE_TOKEN,
+          }),
+        }),
+      );
 
       // Should reject or handle gracefully
-      expect([400, 413, 414, 500]).toContain(response.statusCode);
+      expect([400, 413, 414, 500]).toContain(response.status);
     });
   });
 
@@ -202,16 +211,18 @@ describe.serial("Security Tests - Integration", () => {
     test("should not leak sensitive information in error responses", async () => {
       const app = await getTestApp();
 
-      const response = await app.inject({
-        method: "POST",
-        url: "/api/signup",
-        payload: {
-          email: "invalid-email",
-          turnstileToken: VALID_TURNSTILE_TOKEN,
-        },
-      });
+      const response = await app.handle(
+        new Request("http://localhost/api/signup", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email: "invalid-email",
+            turnstileToken: VALID_TURNSTILE_TOKEN,
+          }),
+        }),
+      );
 
-      const data = response.json() as ApiResponse;
+      const data = await parseJsonResponse<ApiResponse>(response);
 
       // Should not contain sensitive info
       const responseStr = JSON.stringify(data);
@@ -233,15 +244,15 @@ describe.serial("Security Tests - Integration", () => {
       ];
 
       for (const userAgent of suspiciousAgents) {
-        const response = await app.inject({
-          method: "GET",
-          url: "/api/health",
-          headers: { "User-Agent": userAgent },
-        });
+        const response = await app.handle(
+          new Request("http://localhost/api/health", {
+            headers: { "User-Agent": userAgent },
+          }),
+        );
 
         // Should still respond normally
-        expect(response.statusCode).toBeGreaterThanOrEqual(200);
-        expect(response.statusCode).toBeLessThan(600);
+        expect(response.status).toBeGreaterThanOrEqual(200);
+        expect(response.status).toBeLessThan(600);
       }
     });
 
@@ -253,15 +264,15 @@ describe.serial("Security Tests - Integration", () => {
         headers[`X-Custom-${i}`] = "value";
       }
 
-      const response = await app.inject({
-        method: "GET",
-        url: "/api/health",
-        headers,
-      });
+      const response = await app.handle(
+        new Request("http://localhost/api/health", {
+          headers,
+        }),
+      );
 
       // Should handle gracefully
-      expect(response.statusCode).toBeGreaterThanOrEqual(200);
-      expect(response.statusCode).toBeLessThan(600);
+      expect(response.status).toBeGreaterThanOrEqual(200);
+      expect(response.status).toBeLessThan(600);
     });
   });
 
@@ -269,17 +280,18 @@ describe.serial("Security Tests - Integration", () => {
     test("should handle preflight OPTIONS requests", async () => {
       const app = await getTestApp();
 
-      const response = await app.inject({
-        method: "OPTIONS",
-        url: "/api/signup",
-        headers: {
-          Origin: "https://example.com",
-          "Access-Control-Request-Method": "POST",
-        },
-      });
+      const response = await app.handle(
+        new Request("http://localhost/api/signup", {
+          method: "OPTIONS",
+          headers: {
+            Origin: "https://example.com",
+            "Access-Control-Request-Method": "POST",
+          },
+        }),
+      );
 
       // Should handle preflight
-      expect([200, 204, 400, 404]).toContain(response.statusCode);
+      expect([200, 204, 400, 404]).toContain(response.status);
     });
   });
 
@@ -296,18 +308,20 @@ describe.serial("Security Tests - Integration", () => {
       ];
 
       for (const tab of maliciousTabs) {
-        const response = await app.inject({
-          method: "POST",
-          url: "/api/signup",
-          payload: {
-            email: "path-test@example.com",
-            turnstileToken: VALID_TURNSTILE_TOKEN,
-            sheetTab: tab,
-          },
-        });
+        const response = await app.handle(
+          new Request("http://localhost/api/signup", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              email: "path-test@example.com",
+              turnstileToken: VALID_TURNSTILE_TOKEN,
+              sheetTab: tab,
+            }),
+          }),
+        );
 
         // Should handle safely - tab names are just strings
-        expect([200, 500]).toContain(response.statusCode);
+        expect([200, 500]).toContain(response.status);
       }
     });
 
@@ -322,17 +336,19 @@ describe.serial("Security Tests - Integration", () => {
       ];
 
       for (let i = 0; i < maliciousQueries.length; i++) {
-        const response = await app.inject({
-          method: "POST",
-          url: `/api/signup${maliciousQueries[i]}`,
-          payload: {
-            email: `query-injection-test-${i}@example.com`,
-            turnstileToken: VALID_TURNSTILE_TOKEN,
-          },
-        });
+        const response = await app.handle(
+          new Request(`http://localhost/api/signup${maliciousQueries[i]}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              email: `query-injection-test-${i}@example.com`,
+              turnstileToken: VALID_TURNSTILE_TOKEN,
+            }),
+          }),
+        );
 
         // Should handle safely
-        expect([200, 400, 409, 500]).toContain(response.statusCode);
+        expect([200, 400, 409, 500]).toContain(response.status);
       }
     });
   });
@@ -341,31 +357,32 @@ describe.serial("Security Tests - Integration", () => {
     test("should reject incorrect content types for POST requests", async () => {
       const app = await getTestApp();
 
-      const response = await app.inject({
-        method: "POST",
-        url: "/api/signup",
-        headers: { "Content-Type": "application/xml" },
-        payload: '<?xml version="1.0"?><email>test@example.com</email>',
-      });
+      const response = await app.handle(
+        new Request("http://localhost/api/signup", {
+          method: "POST",
+          headers: { "Content-Type": "application/xml" },
+          body: '<?xml version="1.0"?><email>test@example.com</email>',
+        }),
+      );
 
-      // Fastify should handle this - may accept or reject
-      expect(response.statusCode).toBeGreaterThanOrEqual(200);
-      expect(response.statusCode).toBeLessThan(600);
+      // Elysia should handle this - may accept or reject
+      expect(response.status).toBeGreaterThanOrEqual(200);
+      expect(response.status).toBeLessThan(600);
     });
 
     test("should handle missing content-type header", async () => {
       const app = await getTestApp();
 
-      const response = await app.inject({
-        method: "POST",
-        url: "/api/signup",
-        payload: '{ "email": "test@example.com" }',
-        headers: { "Content-Type": undefined as unknown as string },
-      });
+      const response = await app.handle(
+        new Request("http://localhost/api/signup", {
+          method: "POST",
+          body: JSON.stringify({ email: "test@example.com" }),
+        }),
+      );
 
-      // Fastify may still parse it
-      expect(response.statusCode).toBeGreaterThanOrEqual(200);
-      expect(response.statusCode).toBeLessThan(600);
+      // Elysia may still parse it
+      expect(response.status).toBeGreaterThanOrEqual(200);
+      expect(response.status).toBeLessThan(600);
     });
   });
 
@@ -373,16 +390,18 @@ describe.serial("Security Tests - Integration", () => {
     test("should not expose internal paths in errors", async () => {
       const app = await getTestApp();
 
-      const response = await app.inject({
-        method: "POST",
-        url: "/api/signup",
-        payload: {
-          email: "invalid",
-          turnstileToken: VALID_TURNSTILE_TOKEN,
-        },
-      });
+      const response = await app.handle(
+        new Request("http://localhost/api/signup", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email: "invalid",
+            turnstileToken: VALID_TURNSTILE_TOKEN,
+          }),
+        }),
+      );
 
-      const data = response.json() as ApiResponse;
+      const data = await parseJsonResponse<ApiResponse>(response);
       const responseStr = JSON.stringify(data);
 
       // Should not expose file paths
@@ -394,16 +413,18 @@ describe.serial("Security Tests - Integration", () => {
     test("should not expose stack traces in API responses", async () => {
       const app = await getTestApp();
 
-      const response = await app.inject({
-        method: "POST",
-        url: "/api/signup",
-        payload: {
-          email: "",
-          turnstileToken: VALID_TURNSTILE_TOKEN,
-        },
-      });
+      const response = await app.handle(
+        new Request("http://localhost/api/signup", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email: "",
+            turnstileToken: VALID_TURNSTILE_TOKEN,
+          }),
+        }),
+      );
 
-      const data = response.json() as ApiResponse;
+      const data = await parseJsonResponse<ApiResponse>(response);
       const responseStr = JSON.stringify(data);
 
       // Should not contain stack trace indicators
@@ -420,13 +441,14 @@ describe.serial("Security Tests - Integration", () => {
       const methods = ["PUT", "PATCH", "DELETE"];
 
       for (const method of methods) {
-        const response = await app.inject({
-          method: method as "PUT" | "PATCH" | "DELETE",
-          url: "/api/signup",
-        });
+        const response = await app.handle(
+          new Request("http://localhost/api/signup", {
+            method: method as "PUT" | "PATCH" | "DELETE",
+          }),
+        );
 
         // Should return 404, 405, or similar
-        expect([200, 404, 405, 400]).toContain(response.statusCode);
+        expect([200, 404, 405, 400]).toContain(response.status);
       }
     });
   });

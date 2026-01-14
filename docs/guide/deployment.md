@@ -6,9 +6,19 @@ Deploy your email signup API to production.
 
 The API can be deployed in several ways:
 
-1. **Docker** - Containerized deployment with Docker or Docker Compose
-2. **Bun** - Direct deployment on a VPS with Bun
-3. **Serverless** - Deploy to serverless platforms (requires modification)
+1. **Cloudflare Workers** - Edge deployment with automatic scaling (NEW!)
+2. **Docker** - Containerized deployment with Docker or Docker Compose
+3. **Bun** - Direct deployment on a VPS with Bun
+4. **Serverless** - Deploy to serverless platforms (requires modification)
+
+### Deployment Comparison
+
+| Platform | Best For | Latency | Cost | Scaling | Setup |
+|----------|----------|---------|------|---------|-------|
+| **Cloudflare Workers** | Global edge deployment, high traffic | ~10ms worldwide | Free tier + pay-per-request | Automatic | Easiest |
+| **Docker** | Self-hosted, private cloud, VPS | Varies by region | Server cost | Manual | Medium |
+| **Bun/VPS** | Full server control, custom requirements | Varies by region | Server cost | Manual | Medium |
+| **Serverless** | Event-driven workloads | Varies | Pay-per-use | Automatic | Complex |
 
 ## Prerequisites
 
@@ -18,9 +28,341 @@ Before deploying, ensure you have:
 - Production Google Sheet
 - Discord webhook URL (optional)
 - Domain name (optional)
-- SSL certificate (for production)
+- SSL certificate (for production, not needed for Cloudflare Workers)
 
-## 1. Docker Deployment
+---
+
+## 1. Cloudflare Workers Deployment (Recommended)
+
+Cloudflare Workers provides edge deployment with automatic scaling and global distribution. Your API runs in 300+ locations worldwide with zero cold starts.
+
+### Why Cloudflare Workers?
+
+**Advantages:**
+- **Edge Deployment**: Code runs in 300+ locations worldwide
+- **Zero Cold Starts**: Workers platform has no cold starts
+- **Automatic HTTPS**: Built-in SSL certificate management
+- **DDoS Protection**: Cloudflare's network mitigates attacks automatically
+- **Free Tier**: 100,000 requests/day free
+- **Pay-per-Use**: Only pay for what you use beyond free tier
+- **Instant Rollbacks**: Deploy and rollback in seconds
+
+**Limitations:**
+- 10MB bundled size limit
+- 30 second CPU time limit per request
+- No filesystem access (our app uses in-memory static content)
+- Limited TCP socket support (not needed for this app)
+
+### 1.1 Prerequisites
+
+**Required:**
+- Cloudflare account (free at [dash.cloudflare.com](https://dash.cloudflare.com/sign-up))
+- GitHub or GitLab repository
+
+**Optional:**
+- Custom domain (can be configured later)
+
+### 1.2 Installation
+
+1. **Clone and install dependencies:**
+   ```bash
+   git clone https://github.com/briansunter/subs.git
+   cd subs
+   bun install
+   ```
+
+2. **Login to Cloudflare:**
+   ```bash
+   bunx wrangler login
+   ```
+
+   This opens your browser to authenticate with Cloudflare.
+
+### 1.3 Local Development
+
+1. **Create environment file:**
+   ```bash
+   cp .env.example .dev.vars
+   ```
+
+2. **Edit `.dev.vars` with your values:**
+   ```bash
+   # Server Configuration
+   PORT=3000
+   HOST=0.0.0.0
+   NODE_ENV=development
+
+   # CORS - Use your actual domain in production
+   ALLOWED_ORIGINS=*
+
+   # Google Sheets Configuration
+   GOOGLE_SHEET_ID=your_google_sheet_id
+   GOOGLE_CREDENTIALS_EMAIL=your-service-account@project-id.iam.gserviceaccount.com
+   GOOGLE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nYour private key here\n-----END PRIVATE KEY-----\n"
+
+   # Default sheet tab name
+   DEFAULT_SHEET_TAB=Sheet1
+
+   # Optional: Cloudflare Turnstile
+   CLOUDFLARE_TURNSTILE_SITE_KEY=your_site_key
+   CLOUDFLARE_TURNSTILE_SECRET_KEY=your_secret_key
+
+   # Logging
+   LOG_LEVEL=info
+   ```
+
+3. **Start local development server:**
+   ```bash
+   bun run dev:workers
+   ```
+
+   Your Worker is available at `http://localhost:8787`
+
+   **Features:**
+   - Hot reload on file changes
+   - Access to secrets from `.dev.vars`
+   - Full debugging support
+   - Mimics production Workers environment
+
+### 1.4 Production Deployment
+
+#### Step 1: Set Secrets
+
+Set production secrets using `wrangler secret put`. These are encrypted and stored securely:
+
+```bash
+# Required secrets
+bun run workers:secret GOOGLE_SHEET_ID
+bun run workers:secret GOOGLE_CREDENTIALS_EMAIL
+bun run workers:secret GOOGLE_PRIVATE_KEY
+
+# Optional secrets
+bun run workers:secret CLOUDFLARE_TURNSTILE_SECRET_KEY
+bun run workers:secret CLOUDFLARE_TURNSTILE_SITE_KEY
+bun run workers:secret ALLOWED_ORIGINS
+bun run workers:secret DEFAULT_SHEET_TAB
+bun run workers:secret ENABLE_EXTENDED_SIGNUP
+bun run workers:secret ENABLE_BULK_SIGNUP
+bun run workers:secret ENABLE_METRICS
+bun run workers:secret LOG_LEVEL
+```
+
+**Secret Values:**
+- `GOOGLE_SHEET_ID`: Your Google Sheet ID (from sheet URL)
+- `GOOGLE_CREDENTIALS_EMAIL`: Service account email
+- `GOOGLE_PRIVATE_KEY`: Full private key with `\n` for line breaks
+- `CLOUDFLARE_TURNSTILE_SECRET_KEY`: Turnstile secret key
+- `CLOUDFLARE_TURNSTILE_SITE_KEY`: Turnstile site key (for frontend)
+- `ALLOWED_ORIGINS`: Comma-separated origins or `*` (defaults to `*`)
+- `DEFAULT_SHEET_TAB`: Sheet tab name (defaults to `Sheet1`)
+- `ENABLE_EXTENDED_SIGNUP`: `true` or `false` (defaults to `true`)
+- `ENABLE_BULK_SIGNUP`: `true` or `false` (defaults to `true`)
+- `ENABLE_METRICS`: `true` or `false` (defaults to `true`)
+- `LOG_LEVEL`: `debug`, `info`, `warn`, or `error` (defaults to `info`)
+
+#### Step 2: Deploy
+
+```bash
+# Deploy to Cloudflare Workers
+bun run deploy:workers
+```
+
+**Output:**
+```
+⛅️ wrangler 3.114.17
+-------------------------
+Total Upload: 2.45 MB / gzip: 0.58 MB
+Uploaded subs-api (2.45 sec)
+Deployed subs-api triggers
+  https://subs-api.YOUR_SUBDOMAIN.workers.dev
+Current Version ID: <version-id>
+```
+
+Your Worker is now live!
+
+#### Step 3: Verify Deployment
+
+```bash
+# Check deployment status
+bunx wrangler deployments list
+
+# Test your Worker
+curl https://subs-api.YOUR_SUBDOMAIN.workers.dev/api/health
+
+# View real-time logs
+bun run workers:tail
+```
+
+### 1.5 Custom Domain (Optional)
+
+#### Add a Custom Domain
+
+1. **Go to Cloudflare Dashboard:**
+   - Navigate to Workers & Pages > Your Worker > Triggers > Custom Domains
+
+2. **Add Your Domain:**
+   - Click "Add Custom Domain"
+   - Enter `api.yourdomain.com`
+   - Click "Activate Domain"
+
+3. **DNS is Automatic:**
+   - Cloudflare automatically creates DNS records
+   - SSL certificate is provisioned automatically
+   - No manual configuration needed
+
+#### Update CORS Origins
+
+Update your `ALLOWED_ORIGINS` secret:
+```bash
+bun run workers:secret ALLOWED_ORIGINS
+# Enter: https://yourdomain.com,https://www.yourdomain.com
+```
+
+### 1.6 Monitoring and Logs
+
+#### Real-Time Logs
+
+```bash
+# Tail logs in real-time
+bun run workers:tail
+
+# Filter by status
+bun run workers:tail --status 500
+
+# Filter by method
+bun run workers:tail --method POST
+```
+
+#### Analytics Dashboard
+
+1. Go to Cloudflare Dashboard
+2. Workers & Pages > Your Worker > Metrics
+3. View:
+   - Request count and error rate
+   - Response time percentiles
+   - CPU usage
+   - Memory usage
+
+### 1.7 Cost Estimation
+
+**Free Tier:**
+- 100,000 requests/day
+- 10ms CPU time per request
+- Sufficient for most small to medium applications
+
+**Paid Tier** (beyond free):
+- $5/month per million requests
+- $0.50 per million GB-seconds of CPU time
+- $0.60 per million GB-seconds of memory usage
+
+**Example Calculations:**
+- 1 million requests/month: $5/month
+- 10 million requests/month: ~$50/month
+- 100 million requests/month: ~$500/month
+
+### 1.8 Rollback
+
+#### Instant Rollback
+
+```bash
+# List recent deployments
+bunx wrangler deployments list
+
+# Rollback to previous version
+bunx wrangler rollback
+```
+
+Or use the Cloudflare Dashboard:
+1. Workers & Pages > Your Worker > Deployments
+2. Click on a previous deployment
+3. Click "Rollback to this version"
+
+### 1.9 Troubleshooting
+
+#### Common Issues
+
+**"Module not found" errors:**
+```bash
+# Clear cache and rebuild
+rm -rf node_modules
+bun install
+bun run deploy:workers
+```
+
+**Secret not found:**
+```bash
+# Verify secret is set
+bunx wrangler secret list
+
+# Re-set the secret
+bun run workers:secret SECRET_NAME
+```
+
+**Request timeout:**
+- Workers have 30 second CPU time limit
+- Our API typically completes in <1 second
+- If timeouts occur, check Google Sheets API latency
+
+#### Debug Mode
+
+Enable debug logging:
+```bash
+# Set secret
+bun run workers:secret LOG_LEVEL
+
+# Enter: debug
+```
+
+View detailed logs in `wrangler tail`.
+
+### 1.10 Advanced Configuration
+
+**Note:** Wrangler automatically handles TypeScript compilation with the `nodejs_compat` compatibility flag. No custom build command is needed.
+
+#### KV Namespaces (Caching)
+
+For caching frequently accessed data:
+
+```toml
+# wrangler.toml
+[[kv_namespaces]]
+binding = "CACHE"
+id = "your-kv-namespace-id"
+```
+
+#### D1 Databases
+
+For SQL database storage:
+
+```toml
+# wrangler.toml
+[[d1_databases]]
+binding = "DB"
+database_name = "subs-db"
+```
+
+#### Cron Triggers
+
+For scheduled tasks:
+
+```toml
+# wrangler.toml
+[triggers.crons]
+"0 0 * * *" = "cleanup-job"
+```
+
+### 1.11 Migrating from Docker
+
+If you're currently using Docker:
+
+1. **Deploy to Workers** (this section)
+2. **Update DNS** to point to Workers URL
+3. **Monitor** both deployments during transition
+4. **Decommission** Docker once Workers is stable
+
+---
+
+## 2. Docker Deployment
 
 ### Using Docker Compose (Recommended)
 

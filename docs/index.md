@@ -4,7 +4,7 @@ layout: home
 hero:
   name: "subs"
   text: "Production-ready email signup API with invisible bot protection"
-  tagline: "Ship in minutes with Google Sheets, Discord notifications, and Cloudflare Turnstile"
+  tagline: "Ship in minutes with Google Sheets and Cloudflare Turnstile"
   actions:
     - theme: brand
       text: Get Started
@@ -27,8 +27,6 @@ features:
     details: "100% type-safe API with Zod validation and compile-time guarantees. Catch errors before runtime."
   - title: 🔌 Flexible Embedding
     details: "Embed forms anywhere - iframe, inline, direct POST, or JavaScript SDK. Works on any platform."
-  - title: 📢 Real-Time Notifications
-    details: "Optional Discord webhook notifications for new signups, bulk completions, and errors."
   - title: 📑 Multi-Tab Organization
     details: "Separate signups by source with configurable Google Sheets tabs. Automatic tab creation included."
   - title: 🚫 Duplicate Prevention
@@ -49,7 +47,7 @@ bun install
 
 # Configure environment variables
 cp .env.example .env
-# Edit .env with your Google Sheets and Discord credentials
+# Edit .env with your Google Sheets credentials
 
 # Start the development server
 bun run dev
@@ -84,7 +82,6 @@ curl -X POST http://localhost:3000/api/signup \
 
 - **[Getting Started](/guide/getting-started)** - Complete setup guide
 - **[Google Sheets Setup](/guide/google-sheets)** - Detailed Google Sheets configuration
-- **[Discord Setup](/guide/discord)** - Configure Discord webhook notifications
 - **[HTML Form Integration](/guide/integration)** - Embed forms on your website
 - **[API Reference](/guide/api)** - Complete API documentation
 
@@ -123,8 +120,7 @@ subs/
 │   ├── schemas/
 │   │   └── signup.ts       # Zod validation schemas
 │   ├── services/
-│   │   ├── sheets.ts       # Google Sheets integration
-│   │   └── discord.ts      # Discord webhook service
+│   │   └── sheets.ts       # Google Sheets integration
 │   └── utils/
 │       └── logger.ts       # Pino logging
 ├── test/                   # Comprehensive tests

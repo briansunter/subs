@@ -1,6 +1,6 @@
 /**
- * Unit tests for Google Sheets service
- * Tests actual service code with mocked googleapis library
+ * Unit tests for Google Sheets service (REST API version)
+ * Tests actual service code with mocked fetch
  */
 
 // Set up environment before any imports
@@ -11,63 +11,37 @@ process.env["GOOGLE_PRIVATE_KEY"] =
 process.env["NODE_ENV"] = "test";
 process.env["DEFAULT_SHEET_TAB"] = "Sheet1";
 
-// IMPORTANT: Mock modules must be at the very top, before any imports
-import { mock } from "bun:test";
-
-// Create the mock objects first
-const mockAuthAuthorize = mock(() => Promise.resolve());
-
-const mockValuesGet = mock(() => Promise.resolve({ data: { values: [] } }));
-const mockValuesUpdate = mock(() => Promise.resolve({ data: {} }));
-const mockValuesAppend = mock(() => Promise.resolve({ data: {} }));
-
-const mockSpreadsheetsGet = mock(() =>
-  Promise.resolve({
-    data: {
-      sheets: [{ properties: { title: "Sheet1" } }, { properties: { title: "Sheet2" } }],
-    },
-  }),
-);
-const mockSpreadsheetsBatchUpdate = mock(() => Promise.resolve({ data: {} }));
-
-const mockValues = {
-  get: mockValuesGet,
-  update: mockValuesUpdate,
-  append: mockValuesAppend,
-};
-
-const mockSpreadsheets = {
-  get: mockSpreadsheetsGet,
-  batchUpdate: mockSpreadsheetsBatchUpdate,
-  values: mockValues,
-};
-
-const mockSheets = {
-  spreadsheets: mockSpreadsheets,
-};
-
-// Mock google-auth-library
-mock.module("google-auth-library", () => {
-  class MockJWT {
-    authorize = mockAuthAuthorize;
-  }
-  return { JWT: MockJWT };
-});
-
-// Mock googleapis
-mock.module("googleapis", () => {
-  return {
-    google: {
-      sheets: mock(() => mockSheets),
-    },
-  };
-});
-
-// Now we can import after setting up mocks
-import { beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 
 // Import and clear config cache
 import { clearConfigCache, type SignupConfig } from "../../../src/config";
+import { createMockResponse, getRequestBody } from "../../helpers/test-app-elysia";
+
+// Mock jose functions before importing sheets service
+mock.module("jose", () => ({
+  SignJWT: class MockSignJWT {
+    constructor(private payload: Record<string, unknown>) {}
+    setProtectedHeader(_header: Record<string, string>) {
+      return this;
+    }
+    setIssuedAt(_time: number) {
+      return this;
+    }
+    setExpirationTime(_time: number) {
+      return this;
+    }
+    setIssuer(_email: string) {
+      return this;
+    }
+    setAudience(_url: string) {
+      return this;
+    }
+    async sign(_key: unknown) {
+      return "mock-signed-jwt";
+    }
+  },
+  importPKCS8: async (_key: string, _alg: string) => ({}), // Return mock key
+}));
 
 // Import the service functions
 import { appendSignup, emailExists, initializeSheetTab } from "../../../src/services/sheets";
@@ -84,145 +58,330 @@ const testConfig: SignupConfig = {
   enableExtendedSignup: true,
   enableBulkSignup: true,
   enableMetrics: true,
-  enableDiscordNotifications: true,
 };
 
-describe("Sheets Service - Real Implementation Tests", () => {
+// Track fetch calls
+type FetchCall = {
+  url: string;
+  options?: RequestInit;
+};
+
+const fetchCalls: FetchCall[] = [];
+
+describe("Sheets Service - REST API Tests", () => {
+  // Save original fetch
+  const originalFetch = globalThis.fetch;
+
   beforeEach(() => {
     // Clear config cache to ensure clean environment
     clearConfigCache();
 
-    // Reset all mocks
-    mockAuthAuthorize.mockReset();
-    mockValuesGet.mockReset();
-    mockValuesUpdate.mockReset();
-    mockValuesAppend.mockReset();
-    mockSpreadsheetsGet.mockReset();
-    mockSpreadsheetsBatchUpdate.mockReset();
+    // Clear fetch call tracking
+    fetchCalls.length = 0;
 
-    // Set default return values
-    mockAuthAuthorize.mockResolvedValue(undefined);
-    mockValuesGet.mockResolvedValue({ data: { values: [] } });
-    mockValuesUpdate.mockResolvedValue({ data: {} });
-    mockValuesAppend.mockResolvedValue({ data: {} });
-    mockSpreadsheetsGet.mockResolvedValue({
-      data: {
-        sheets: [{ properties: { title: "Sheet1" } }, { properties: { title: "Sheet2" } }],
-      },
+    // Mock fetch
+    globalThis.fetch = mock(async (url: string | Request, options?: RequestInit) => {
+      fetchCalls.push({
+        url: url.toString(),
+        options,
+      });
+
+      const urlString = url.toString();
+
+      // Mock token endpoint
+      if (urlString.includes("oauth2.googleapis.com/token")) {
+        return createMockResponse(200, {
+          access_token: "mock-access-token",
+          expires_in: 3600,
+          token_type: "Bearer",
+        });
+      }
+
+      // Mock spreadsheet get
+      if (
+        urlString.includes("/spreadsheets/test-sheet-id") &&
+        !urlString.includes(":batchUpdate") &&
+        !urlString.includes("/values/")
+      ) {
+        return createMockResponse(200, {
+          sheets: [
+            { properties: { title: "Sheet1", sheetId: 1 } },
+            { properties: { title: "Sheet2", sheetId: 2 } },
+          ],
+        });
+      }
+
+      // Mock values get
+      if (
+        urlString.includes("/values/") &&
+        (!options || options.method !== "PUT") &&
+        (!options || options.method !== "POST")
+      ) {
+        return createMockResponse(200, {
+          values: [["Email"], ["existing@example.com"]],
+        });
+      }
+
+      // Mock batch update
+      if (urlString.includes(":batchUpdate")) {
+        return createMockResponse(200, {});
+      }
+
+      // Mock values update
+      if (options?.method === "PUT" && urlString.includes("/values/")) {
+        return createMockResponse(200, {});
+      }
+
+      // Mock values append
+      if (options?.method === "POST" && urlString.includes(":append")) {
+        return createMockResponse(200, {
+          updates: { updatedRows: 1 },
+        });
+      }
+
+      // Default error
+      return createMockResponse(404, { error: "Not found" });
     });
-    mockSpreadsheetsBatchUpdate.mockResolvedValue({ data: {} });
+  });
+
+  afterEach(() => {
+    // Restore original fetch
+    globalThis.fetch = originalFetch;
   });
 
   describe("initializeSheetTab", () => {
     test("should skip creation when sheet already exists", async () => {
-      // Mock spreadsheet with existing sheet
-      mockSpreadsheetsGet.mockResolvedValue({
-        data: {
-          sheets: [{ properties: { title: "Sheet1" } }],
-        },
-      });
-
       // Mock existing headers
-      mockValuesGet.mockResolvedValue({
-        data: {
-          values: [["Email", "Timestamp"]],
-        },
+      globalThis.fetch = mock(async (url: string | Request, options?: RequestInit) => {
+        fetchCalls.push({ url: url.toString(), options });
+
+        const urlString = url.toString();
+
+        if (urlString.includes("oauth2.googleapis.com/token")) {
+          return createMockResponse(200, {
+            access_token: "mock-access-token",
+            expires_in: 3600,
+            token_type: "Bearer",
+          });
+        }
+
+        if (
+          urlString.includes("/spreadsheets/test-sheet-id") &&
+          !urlString.includes(":batchUpdate") &&
+          !urlString.includes("/values/")
+        ) {
+          return createMockResponse(200, {
+            sheets: [{ properties: { title: "Sheet1", sheetId: 1 } }],
+          });
+        }
+
+        if (urlString.includes("/values/Sheet1!A1%3AG1")) {
+          return createMockResponse(200, {
+            values: [["Email", "Timestamp", "Source", "Name", "Tags", "Metadata", "Sheet Tab"]],
+          });
+        }
+
+        return createMockResponse(404, { error: "Not found" });
       });
 
       await initializeSheetTab("Sheet1", testConfig);
 
-      // Should check if sheet exists
-      expect(mockSpreadsheetsGet).toHaveBeenCalled();
-      // Should check for headers
-      expect(mockValuesGet).toHaveBeenCalled();
+      // Verify spreadsheet get was called
+      const getSheetCalls = fetchCalls.filter(
+        (c) =>
+          c.url.includes("/spreadsheets/test-sheet-id") &&
+          !c.url.includes(":batchUpdate") &&
+          !c.url.includes("/values/"),
+      );
+      expect(getSheetCalls.length).toBeGreaterThan(0);
+
+      // Verify values get was called
+      const valuesGetCalls = fetchCalls.filter(
+        (c) => c.url.includes("/values/Sheet1!A1%3AG1") && c.options?.method !== "PUT",
+      );
+      expect(valuesGetCalls.length).toBeGreaterThan(0);
+
       // Should NOT create new sheet
-      expect(mockSpreadsheetsBatchUpdate).not.toHaveBeenCalled();
+      const batchUpdateCalls = fetchCalls.filter((c) => c.url.includes(":batchUpdate"));
+      expect(batchUpdateCalls.length).toBe(0);
+
       // Should NOT add headers
-      expect(mockValuesUpdate).not.toHaveBeenCalled();
+      const updateCalls = fetchCalls.filter(
+        (c) => c.options?.method === "PUT" && c.url.includes("/values/"),
+      );
+      expect(updateCalls.length).toBe(0);
     });
 
     test("should create new sheet when doesn't exist", async () => {
-      // Mock spreadsheet without target sheet
-      mockSpreadsheetsGet.mockResolvedValue({
-        data: {
-          sheets: [{ properties: { title: "OtherSheet" } }],
-        },
-      });
+      globalThis.fetch = mock(async (url: string | Request, options?: RequestInit) => {
+        fetchCalls.push({ url: url.toString(), options });
 
-      // Mock empty sheet (no headers)
-      mockValuesGet.mockResolvedValue({
-        data: {
-          values: [],
-        },
+        const urlString = url.toString();
+
+        if (urlString.includes("oauth2.googleapis.com/token")) {
+          return createMockResponse(200, {
+            access_token: "mock-access-token",
+            expires_in: 3600,
+            token_type: "Bearer",
+          });
+        }
+
+        if (
+          urlString.includes("/spreadsheets/test-sheet-id") &&
+          !urlString.includes(":batchUpdate") &&
+          !urlString.includes("/values/")
+        ) {
+          // Sheet doesn't exist
+          return createMockResponse(200, {
+            sheets: [{ properties: { title: "OtherSheet", sheetId: 1 } }],
+          });
+        }
+
+        if (urlString.includes(":batchUpdate")) {
+          return createMockResponse(200, {});
+        }
+
+        if (urlString.includes("/values/NewSheet!A1%3AG1")) {
+          // Empty sheet
+          return createMockResponse(200, {
+            values: [],
+          });
+        }
+
+        if (options?.method === "PUT" && urlString.includes("/values/")) {
+          return createMockResponse(200, {});
+        }
+
+        return createMockResponse(404, { error: "Not found" });
       });
 
       await initializeSheetTab("NewSheet", testConfig);
 
-      // Should create new sheet
-      expect(mockSpreadsheetsBatchUpdate).toHaveBeenCalledWith({
-        spreadsheetId: "test-sheet-id",
-        requestBody: {
-          requests: [
-            {
-              addSheet: {
-                properties: {
-                  title: "NewSheet",
-                },
-              },
-            },
-          ],
-        },
-      });
+      // Should create new sheet via batchUpdate
+      const batchUpdateCalls = fetchCalls.filter((c) => c.url.includes(":batchUpdate"));
+      expect(batchUpdateCalls.length).toBeGreaterThan(0);
 
-      // Should add headers
-      expect(mockValuesUpdate).toHaveBeenCalledWith({
-        spreadsheetId: "test-sheet-id",
-        range: "NewSheet!A1:G1",
-        valueInputOption: "RAW",
-        requestBody: {
-          values: [["Email", "Timestamp", "Source", "Name", "Tags", "Metadata", "Sheet Tab"]],
+      const batchUpdateBody = getRequestBody(batchUpdateCalls[0]?.options);
+      expect(batchUpdateBody.requests).toEqual([
+        {
+          addSheet: {
+            properties: {
+              title: "NewSheet",
+            },
+          },
         },
-      });
+      ]);
+
+      // Should add headers via PUT
+      const updateCalls = fetchCalls.filter(
+        (c) => c.options?.method === "PUT" && c.url.includes("/values/"),
+      );
+      expect(updateCalls.length).toBeGreaterThan(0);
+
+      const updateBody = getRequestBody(updateCalls[0]?.options);
+      expect(updateBody.values).toEqual([
+        ["Email", "Timestamp", "Source", "Name", "Tags", "Metadata", "Sheet Tab"],
+      ]);
     });
 
     test("should add headers when sheet is empty", async () => {
-      mockSpreadsheetsGet.mockResolvedValue({
-        data: {
-          sheets: [{ properties: { title: "Sheet1" } }],
-        },
-      });
+      globalThis.fetch = mock(async (url: string | Request, options?: RequestInit) => {
+        fetchCalls.push({ url: url.toString(), options });
 
-      // Mock empty values
-      mockValuesGet.mockResolvedValue({
-        data: {
-          values: null,
-        },
+        const urlString = url.toString();
+
+        if (urlString.includes("oauth2.googleapis.com/token")) {
+          return createMockResponse(200, {
+            access_token: "mock-access-token",
+            expires_in: 3600,
+            token_type: "Bearer",
+          });
+        }
+
+        if (
+          urlString.includes("/spreadsheets/test-sheet-id") &&
+          !urlString.includes(":batchUpdate") &&
+          !urlString.includes("/values/")
+        ) {
+          return createMockResponse(200, {
+            sheets: [{ properties: { title: "Sheet1", sheetId: 1 } }],
+          });
+        }
+
+        if (urlString.includes("/values/Sheet1!A1%3AG1") && options?.method !== "PUT") {
+          // Empty values
+          return createMockResponse(200, {
+            values: null,
+          });
+        }
+
+        if (options?.method === "PUT" && urlString.includes("/values/")) {
+          return createMockResponse(200, {});
+        }
+
+        return createMockResponse(404, { error: "Not found" });
       });
 
       await initializeSheetTab("Sheet1", testConfig);
 
-      expect(mockValuesUpdate).toHaveBeenCalled();
+      // Should add headers
+      const updateCalls = fetchCalls.filter(
+        (c) => c.options?.method === "PUT" && c.url.includes("/values/"),
+      );
+      expect(updateCalls.length).toBeGreaterThan(0);
     });
 
     test("should handle API errors gracefully", async () => {
-      mockSpreadsheetsGet.mockRejectedValue(new Error("API Error"));
+      globalThis.fetch = mock(async () => {
+        return createMockResponse(500, { error: "Internal Server Error" });
+      });
 
-      await expect(initializeSheetTab("Sheet1", testConfig)).rejects.toThrow("API Error");
+      await expect(initializeSheetTab("Sheet1", testConfig)).rejects.toThrow();
     });
   });
 
   describe("appendSignup", () => {
     test("should append row with all fields", async () => {
-      // Mock initializeSheetTab calls
-      mockSpreadsheetsGet.mockResolvedValue({
-        data: {
-          sheets: [{ properties: { title: "Sheet1" } }],
-        },
-      });
-      mockValuesGet.mockResolvedValue({
-        data: {
-          values: [["Email", "Timestamp"]],
-        },
+      globalThis.fetch = mock(async (url: string | Request, options?: RequestInit) => {
+        fetchCalls.push({ url: url.toString(), options });
+
+        const urlString = url.toString();
+
+        if (urlString.includes("oauth2.googleapis.com/token")) {
+          return createMockResponse(200, {
+            access_token: "mock-access-token",
+            expires_in: 3600,
+            token_type: "Bearer",
+          });
+        }
+
+        if (
+          urlString.includes("/spreadsheets/test-sheet-id") &&
+          !urlString.includes(":batchUpdate") &&
+          !urlString.includes("/values/")
+        ) {
+          return createMockResponse(200, {
+            sheets: [{ properties: { title: "Sheet1", sheetId: 1 } }],
+          });
+        }
+
+        if (
+          urlString.includes("/values/") &&
+          options?.method !== "PUT" &&
+          options?.method !== "POST"
+        ) {
+          return createMockResponse(200, {
+            values: [["Email", "Timestamp"]],
+          });
+        }
+
+        if (urlString.includes(":append")) {
+          return createMockResponse(200, {
+            updates: { updatedRows: 1 },
+          });
+        }
+
+        return createMockResponse(404, { error: "Not found" });
       });
 
       await appendSignup(
@@ -238,37 +397,64 @@ describe("Sheets Service - Real Implementation Tests", () => {
         testConfig,
       );
 
-      expect(mockValuesAppend).toHaveBeenCalledWith({
-        spreadsheetId: "test-sheet-id",
-        range: "Sheet1!A:A",
-        valueInputOption: "RAW",
-        insertDataOption: "INSERT_ROWS",
-        requestBody: {
-          values: [
-            [
-              "test@example.com",
-              "2024-01-01T00:00:00.000Z",
-              "website",
-              "John Doe",
-              "newsletter, beta",
-              '{"source":"landing-page"}',
-              "Sheet1",
-            ],
-          ],
-        },
-      });
+      const appendCalls = fetchCalls.filter((c) => c.url.includes(":append"));
+      expect(appendCalls.length).toBeGreaterThan(0);
+
+      const appendBody = getRequestBody(appendCalls[0]?.options);
+      expect(appendBody.values).toEqual([
+        [
+          "test@example.com",
+          "2024-01-01T00:00:00.000Z",
+          "website",
+          "John Doe",
+          "newsletter, beta",
+          '{"source":"landing-page"}',
+          "Sheet1",
+        ],
+      ]);
     });
 
     test("should use default source when not provided", async () => {
-      mockSpreadsheetsGet.mockResolvedValue({
-        data: {
-          sheets: [{ properties: { title: "Sheet1" } }],
-        },
-      });
-      mockValuesGet.mockResolvedValue({
-        data: {
-          values: [["Email"]],
-        },
+      globalThis.fetch = mock(async (url: string | Request, options?: RequestInit) => {
+        fetchCalls.push({ url: url.toString(), options });
+
+        const urlString = url.toString();
+
+        if (urlString.includes("oauth2.googleapis.com/token")) {
+          return createMockResponse(200, {
+            access_token: "mock-access-token",
+            expires_in: 3600,
+            token_type: "Bearer",
+          });
+        }
+
+        if (
+          urlString.includes("/spreadsheets/test-sheet-id") &&
+          !urlString.includes(":batchUpdate") &&
+          !urlString.includes("/values/")
+        ) {
+          return createMockResponse(200, {
+            sheets: [{ properties: { title: "Sheet1", sheetId: 1 } }],
+          });
+        }
+
+        if (
+          urlString.includes("/values/") &&
+          options?.method !== "PUT" &&
+          options?.method !== "POST"
+        ) {
+          return createMockResponse(200, {
+            values: [["Email"]],
+          });
+        }
+
+        if (urlString.includes(":append")) {
+          return createMockResponse(200, {
+            updates: { updatedRows: 1 },
+          });
+        }
+
+        return createMockResponse(404, { error: "Not found" });
       });
 
       await appendSignup(
@@ -281,21 +467,52 @@ describe("Sheets Service - Real Implementation Tests", () => {
         testConfig,
       );
 
-      const callArgs = mockValuesAppend.mock.calls[0];
-      expect(callArgs).toBeDefined();
-      expect(callArgs?.[0].requestBody.values[0][2]).toBe("api"); // Default source
+      const appendCalls = fetchCalls.filter((c) => c.url.includes(":append"));
+      const appendBody = getRequestBody(appendCalls[0]?.options);
+      expect(appendBody.values[0][2]).toBe("api"); // Default source
     });
 
     test("should handle empty tags array", async () => {
-      mockSpreadsheetsGet.mockResolvedValue({
-        data: {
-          sheets: [{ properties: { title: "Sheet1" } }],
-        },
-      });
-      mockValuesGet.mockResolvedValue({
-        data: {
-          values: [["Email"]],
-        },
+      globalThis.fetch = mock(async (url: string | Request, options?: RequestInit) => {
+        fetchCalls.push({ url: url.toString(), options });
+
+        const urlString = url.toString();
+
+        if (urlString.includes("oauth2.googleapis.com/token")) {
+          return createMockResponse(200, {
+            access_token: "mock-access-token",
+            expires_in: 3600,
+            token_type: "Bearer",
+          });
+        }
+
+        if (
+          urlString.includes("/spreadsheets/test-sheet-id") &&
+          !urlString.includes(":batchUpdate") &&
+          !urlString.includes("/values/")
+        ) {
+          return createMockResponse(200, {
+            sheets: [{ properties: { title: "Sheet1", sheetId: 1 } }],
+          });
+        }
+
+        if (
+          urlString.includes("/values/") &&
+          options?.method !== "PUT" &&
+          options?.method !== "POST"
+        ) {
+          return createMockResponse(200, {
+            values: [["Email"]],
+          });
+        }
+
+        if (urlString.includes(":append")) {
+          return createMockResponse(200, {
+            updates: { updatedRows: 1 },
+          });
+        }
+
+        return createMockResponse(404, { error: "Not found" });
       });
 
       await appendSignup(
@@ -308,21 +525,52 @@ describe("Sheets Service - Real Implementation Tests", () => {
         testConfig,
       );
 
-      const callArgs = mockValuesAppend.mock.calls[0];
-      expect(callArgs).toBeDefined();
-      expect(callArgs?.[0].requestBody.values[0][4]).toBe(""); // Empty tags
+      const appendCalls = fetchCalls.filter((c) => c.url.includes(":append"));
+      const appendBody = getRequestBody(appendCalls[0]?.options);
+      expect(appendBody.values[0][4]).toBe(""); // Empty tags
     });
 
     test("should stringify metadata object", async () => {
-      mockSpreadsheetsGet.mockResolvedValue({
-        data: {
-          sheets: [{ properties: { title: "Sheet1" } }],
-        },
-      });
-      mockValuesGet.mockResolvedValue({
-        data: {
-          values: [["Email"]],
-        },
+      globalThis.fetch = mock(async (url: string | Request, options?: RequestInit) => {
+        fetchCalls.push({ url: url.toString(), options });
+
+        const urlString = url.toString();
+
+        if (urlString.includes("oauth2.googleapis.com/token")) {
+          return createMockResponse(200, {
+            access_token: "mock-access-token",
+            expires_in: 3600,
+            token_type: "Bearer",
+          });
+        }
+
+        if (
+          urlString.includes("/spreadsheets/test-sheet-id") &&
+          !urlString.includes(":batchUpdate") &&
+          !urlString.includes("/values/")
+        ) {
+          return createMockResponse(200, {
+            sheets: [{ properties: { title: "Sheet1", sheetId: 1 } }],
+          });
+        }
+
+        if (
+          urlString.includes("/values/") &&
+          options?.method !== "PUT" &&
+          options?.method !== "POST"
+        ) {
+          return createMockResponse(200, {
+            values: [["Email"]],
+          });
+        }
+
+        if (urlString.includes(":append")) {
+          return createMockResponse(200, {
+            updates: { updatedRows: 1 },
+          });
+        }
+
+        return createMockResponse(404, { error: "Not found" });
       });
 
       await appendSignup(
@@ -335,21 +583,52 @@ describe("Sheets Service - Real Implementation Tests", () => {
         testConfig,
       );
 
-      const callArgs = mockValuesAppend.mock.calls[0];
-      expect(callArgs).toBeDefined();
-      expect(callArgs?.[0].requestBody.values[0][5]).toBe('{"key":"value"}');
+      const appendCalls = fetchCalls.filter((c) => c.url.includes(":append"));
+      const appendBody = getRequestBody(appendCalls[0]?.options);
+      expect(appendBody.values[0][5]).toBe('{"key":"value"}');
     });
 
     test("should handle empty metadata", async () => {
-      mockSpreadsheetsGet.mockResolvedValue({
-        data: {
-          sheets: [{ properties: { title: "Sheet1" } }],
-        },
-      });
-      mockValuesGet.mockResolvedValue({
-        data: {
-          values: [["Email"]],
-        },
+      globalThis.fetch = mock(async (url: string | Request, options?: RequestInit) => {
+        fetchCalls.push({ url: url.toString(), options });
+
+        const urlString = url.toString();
+
+        if (urlString.includes("oauth2.googleapis.com/token")) {
+          return createMockResponse(200, {
+            access_token: "mock-access-token",
+            expires_in: 3600,
+            token_type: "Bearer",
+          });
+        }
+
+        if (
+          urlString.includes("/spreadsheets/test-sheet-id") &&
+          !urlString.includes(":batchUpdate") &&
+          !urlString.includes("/values/")
+        ) {
+          return createMockResponse(200, {
+            sheets: [{ properties: { title: "Sheet1", sheetId: 1 } }],
+          });
+        }
+
+        if (
+          urlString.includes("/values/") &&
+          options?.method !== "PUT" &&
+          options?.method !== "POST"
+        ) {
+          return createMockResponse(200, {
+            values: [["Email"]],
+          });
+        }
+
+        if (urlString.includes(":append")) {
+          return createMockResponse(200, {
+            updates: { updatedRows: 1 },
+          });
+        }
+
+        return createMockResponse(404, { error: "Not found" });
       });
 
       await appendSignup(
@@ -361,23 +640,48 @@ describe("Sheets Service - Real Implementation Tests", () => {
         testConfig,
       );
 
-      const callArgs = mockValuesAppend.mock.calls[0];
-      expect(callArgs).toBeDefined();
-      expect(callArgs?.[0].requestBody.values[0][5]).toBe(""); // Empty metadata
+      const appendCalls = fetchCalls.filter((c) => c.url.includes(":append"));
+      const appendBody = getRequestBody(appendCalls[0]?.options);
+      expect(appendBody.values[0][5]).toBe(""); // Empty metadata
     });
 
     test("should throw error on append failure", async () => {
-      mockSpreadsheetsGet.mockResolvedValue({
-        data: {
-          sheets: [{ properties: { title: "Sheet1" } }],
-        },
+      globalThis.fetch = mock(async (url: string | Request, options?: RequestInit) => {
+        fetchCalls.push({ url: url.toString(), options });
+
+        const urlString = url.toString();
+
+        if (urlString.includes("oauth2.googleapis.com/token")) {
+          return createMockResponse(200, {
+            access_token: "mock-access-token",
+            expires_in: 3600,
+            token_type: "Bearer",
+          });
+        }
+
+        if (
+          urlString.includes("/spreadsheets/test-sheet-id") &&
+          !urlString.includes(":batchUpdate") &&
+          !urlString.includes("/values/")
+        ) {
+          return createMockResponse(200, {
+            sheets: [{ properties: { title: "Sheet1", sheetId: 1 } }],
+          });
+        }
+
+        if (
+          urlString.includes("/values/") &&
+          options?.method !== "PUT" &&
+          options?.method !== "POST"
+        ) {
+          return createMockResponse(200, {
+            values: [["Email"]],
+          });
+        }
+
+        // Return error for append
+        return createMockResponse(500, { error: "Append failed" });
       });
-      mockValuesGet.mockResolvedValue({
-        data: {
-          values: [["Email"]],
-        },
-      });
-      mockValuesAppend.mockRejectedValue(new Error("Append failed"));
 
       await expect(
         appendSignup({
@@ -391,44 +695,80 @@ describe("Sheets Service - Real Implementation Tests", () => {
 
   describe("emailExists", () => {
     test("should return true when email found in sheet", async () => {
-      mockSpreadsheetsGet.mockResolvedValue({
-        data: {
-          sheets: [{ properties: { title: "Sheet1" } }],
-        },
-      });
+      globalThis.fetch = mock(async (url: string | Request, options?: RequestInit) => {
+        fetchCalls.push({ url: url.toString(), options });
 
-      mockValuesGet.mockResolvedValue({
-        data: {
-          values: [
-            ["Email"], // header
-            ["test@example.com"], // data
-          ],
-        },
+        const urlString = url.toString();
+
+        if (urlString.includes("oauth2.googleapis.com/token")) {
+          return createMockResponse(200, {
+            access_token: "mock-access-token",
+            expires_in: 3600,
+            token_type: "Bearer",
+          });
+        }
+
+        if (
+          urlString.includes("/spreadsheets/test-sheet-id") &&
+          !urlString.includes(":batchUpdate") &&
+          !urlString.includes("/values/")
+        ) {
+          return createMockResponse(200, {
+            sheets: [{ properties: { title: "Sheet1", sheetId: 1 } }],
+          });
+        }
+
+        if (urlString.includes("/values/Sheet1!A%3AA")) {
+          return createMockResponse(200, {
+            values: [
+              ["Email"], // header
+              ["test@example.com"], // data
+            ],
+          });
+        }
+
+        return createMockResponse(404, { error: "Not found" });
       });
 
       const exists = await emailExists("test@example.com", undefined, testConfig);
 
       expect(exists).toBe(true);
-      expect(mockValuesGet).toHaveBeenCalledWith({
-        spreadsheetId: "test-sheet-id",
-        range: "Sheet1!A:A",
-      });
     });
 
     test("should be case-insensitive when checking", async () => {
-      mockSpreadsheetsGet.mockResolvedValue({
-        data: {
-          sheets: [{ properties: { title: "Sheet1" } }],
-        },
-      });
+      globalThis.fetch = mock(async (url: string | Request, options?: RequestInit) => {
+        fetchCalls.push({ url: url.toString(), options });
 
-      mockValuesGet.mockResolvedValue({
-        data: {
-          values: [
-            ["Email"],
-            ["test@example.com"], // lowercase in sheet
-          ],
-        },
+        const urlString = url.toString();
+
+        if (urlString.includes("oauth2.googleapis.com/token")) {
+          return createMockResponse(200, {
+            access_token: "mock-access-token",
+            expires_in: 3600,
+            token_type: "Bearer",
+          });
+        }
+
+        if (
+          urlString.includes("/spreadsheets/test-sheet-id") &&
+          !urlString.includes(":batchUpdate") &&
+          !urlString.includes("/values/")
+        ) {
+          return createMockResponse(200, {
+            sheets: [{ properties: { title: "Sheet1", sheetId: 1 } }],
+          });
+        }
+
+        if (urlString.includes("/values/")) {
+          return createMockResponse(200, {
+            values: [
+              ["Email"],
+              ["test@example.com"], // lowercase in sheet
+            ],
+          });
+        }
+
+        return createMockResponse(404, { error: "Not found" });
       });
 
       const exists = await emailExists("TEST@EXAMPLE.COM", undefined, testConfig); // uppercase search
@@ -437,16 +777,36 @@ describe("Sheets Service - Real Implementation Tests", () => {
     });
 
     test("should return false when email not found", async () => {
-      mockSpreadsheetsGet.mockResolvedValue({
-        data: {
-          sheets: [{ properties: { title: "Sheet1" } }],
-        },
-      });
+      globalThis.fetch = mock(async (url: string | Request, options?: RequestInit) => {
+        fetchCalls.push({ url: url.toString(), options });
 
-      mockValuesGet.mockResolvedValue({
-        data: {
-          values: [["Email"], ["other@example.com"]],
-        },
+        const urlString = url.toString();
+
+        if (urlString.includes("oauth2.googleapis.com/token")) {
+          return createMockResponse(200, {
+            access_token: "mock-access-token",
+            expires_in: 3600,
+            token_type: "Bearer",
+          });
+        }
+
+        if (
+          urlString.includes("/spreadsheets/test-sheet-id") &&
+          !urlString.includes(":batchUpdate") &&
+          !urlString.includes("/values/")
+        ) {
+          return createMockResponse(200, {
+            sheets: [{ properties: { title: "Sheet1", sheetId: 1 } }],
+          });
+        }
+
+        if (urlString.includes("/values/")) {
+          return createMockResponse(200, {
+            values: [["Email"], ["other@example.com"]],
+          });
+        }
+
+        return createMockResponse(404, { error: "Not found" });
       });
 
       const exists = await emailExists("test@example.com", undefined, testConfig);
@@ -455,55 +815,104 @@ describe("Sheets Service - Real Implementation Tests", () => {
     });
 
     test("should search all tabs when sheetTab not provided", async () => {
-      mockSpreadsheetsGet.mockResolvedValue({
-        data: {
-          sheets: [{ properties: { title: "Sheet1" } }, { properties: { title: "Sheet2" } }],
-        },
-      });
-
-      // First call for spreadsheet info, then calls for each tab
       let callCount = 0;
-      mockValuesGet.mockImplementation(() => {
-        callCount++;
-        if (callCount === 1) {
-          return Promise.resolve({
-            data: { values: [["Email"], ["other1@example.com"]] },
+      globalThis.fetch = mock(async (url: string | Request, options?: RequestInit) => {
+        fetchCalls.push({ url: url.toString(), options });
+
+        const urlString = url.toString();
+
+        if (urlString.includes("oauth2.googleapis.com/token")) {
+          return createMockResponse(200, {
+            access_token: "mock-access-token",
+            expires_in: 3600,
+            token_type: "Bearer",
           });
         }
-        return Promise.resolve({
-          data: { values: [["Email"], ["test@example.com"]] }, // Found here!
-        });
+
+        if (
+          urlString.includes("/spreadsheets/test-sheet-id") &&
+          !urlString.includes(":batchUpdate") &&
+          !urlString.includes("/values/")
+        ) {
+          return createMockResponse(200, {
+            sheets: [
+              { properties: { title: "Sheet1", sheetId: 1 } },
+              { properties: { title: "Sheet2", sheetId: 2 } },
+            ],
+          });
+        }
+
+        if (urlString.includes("/values/")) {
+          callCount++;
+          if (callCount === 1) {
+            return createMockResponse(200, {
+              values: [["Email"], ["other1@example.com"]],
+            });
+          }
+          return createMockResponse(200, {
+            values: [["Email"], ["test@example.com"]], // Found here!
+          });
+        }
+
+        return createMockResponse(404, { error: "Not found" });
       });
 
       const exists = await emailExists("test@example.com", undefined, testConfig);
 
       expect(exists).toBe(true);
-      // Should have 2 calls for checking values (1 for Sheet1, 1 for Sheet2)
-      expect(mockValuesGet.mock.calls.length).toBeGreaterThanOrEqual(2);
+      // Should have called values API at least twice (once for each sheet)
+      expect(fetchCalls.filter((c) => c.url.includes("/values/")).length).toBeGreaterThanOrEqual(2);
     });
 
     test("should search specific tab when sheetTab provided", async () => {
-      mockSpreadsheetsGet.mockResolvedValue({
-        data: {
-          sheets: [{ properties: { title: "Sheet1" } }, { properties: { title: "Sheet2" } }],
-        },
-      });
+      globalThis.fetch = mock(async (url: string | Request, options?: RequestInit) => {
+        fetchCalls.push({ url: url.toString(), options });
 
-      mockValuesGet.mockResolvedValue({
-        data: {
-          values: [["Email"], ["test@example.com"]],
-        },
+        const urlString = url.toString();
+
+        if (urlString.includes("oauth2.googleapis.com/token")) {
+          return createMockResponse(200, {
+            access_token: "mock-access-token",
+            expires_in: 3600,
+            token_type: "Bearer",
+          });
+        }
+
+        if (
+          urlString.includes("/spreadsheets/test-sheet-id") &&
+          !urlString.includes(":batchUpdate") &&
+          !urlString.includes("/values/")
+        ) {
+          return createMockResponse(200, {
+            sheets: [
+              { properties: { title: "Sheet1", sheetId: 1 } },
+              { properties: { title: "Sheet2", sheetId: 2 } },
+            ],
+          });
+        }
+
+        if (urlString.includes("/values/Sheet2!A%3AA")) {
+          return createMockResponse(200, {
+            values: [["Email"], ["test@example.com"]],
+          });
+        }
+
+        return createMockResponse(404, { error: "Not found" });
       });
 
       const exists = await emailExists("test@example.com", "Sheet2", testConfig);
 
       expect(exists).toBe(true);
-      // Should only call for Sheet2 (plus one call for getting sheet tabs)
-      expect(mockValuesGet).toHaveBeenCalled();
+      // Should only check Sheet2
+      const valuesCalls = fetchCalls.filter((c) => c.url.includes("/values/"));
+      expect(valuesCalls.length).toBe(1);
+      expect(valuesCalls[0].url).toContain("Sheet2");
     });
 
     test("should return false on API errors gracefully", async () => {
-      mockSpreadsheetsGet.mockRejectedValue(new Error("API Error"));
+      globalThis.fetch = mock(async () => {
+        return createMockResponse(500, { error: "API Error" });
+      });
 
       const exists = await emailExists("test@example.com", undefined, testConfig);
 

@@ -1,0 +1,55 @@
+# Cloudflare Workers configuration
+# See https://developers.cloudflare.com/workers/wrangler/configuration/
+
+name = "subs-api"
+main = "src/index.worker.ts"
+compatibility_date = "2025-06-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Account and project (set via wrangler login)
+# account_id = "your-account-id"  # Auto-detected from wrangler login
+
+# Route configuration (optional - for custom domains)
+# routes = [
+#   { pattern = "api.yourdomain.com/*", zone_name = "yourdomain.com" }
+# ]
+
+# Environment variables (secrets should be set via `wrangler secret`)
+# Use `wrangler secret put <NAME>` to set sensitive values
+#
+# Required secrets:
+# - GOOGLE_SHEET_ID
+# - GOOGLE_CREDENTIALS_EMAIL
+# - GOOGLE_PRIVATE_KEY
+# - CLOUDFLARE_TURNSTILE_SECRET_KEY (if using Turnstile)
+#
+# Optional secrets:
+# - CLOUDFLARE_TURNSTILE_SITE_KEY
+# - ALLOWED_ORIGINS (defaults to *)
+# - DEFAULT_SHEET_TAB (defaults to "Sheet1")
+# - ENABLE_EXTENDED_SIGNUP (defaults to "true")
+# - ENABLE_BULK_SIGNUP (defaults to "true")
+# - ENABLE_METRICS (defaults to "true")
+# - LOG_LEVEL (defaults to "info")
+
+# KV Namespaces (optional - for caching)
+# [[kv_namespaces]]
+# binding = "CACHE"
+# id = "your-kv-namespace-id"
+
+# D1 Databases (optional - for future SQL support)
+# [[d1_databases]]
+# binding = "DB"
+# database_name = "subs-db"
+
+# Workers AI (optional)
+# [ai]
+# binding = "AI"
+
+# Development environment
+[env.development]
+vars = { ENVIRONMENT = "development" }
+
+# Production environment
+[env.production]
+vars = { ENVIRONMENT = "production" }

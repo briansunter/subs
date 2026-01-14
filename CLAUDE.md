@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-Bun-based email signup API built with Fastify, TypeScript, Google Sheets, and Discord webhooks. Validates email signups, stores them in Google Sheets, and optionally sends Discord notifications.
+Bun-based email signup API built with **ElysiaJS**, TypeScript, and Google Sheets. Validates email signups and stores them in Google Sheets with invisible bot protection via Cloudflare Turnstile.
 
 ## Commands
 
@@ -13,7 +13,7 @@ Bun-based email signup API built with Fastify, TypeScript, Google Sheets, and Di
 - `bun run start` - Start production server
 
 ### Testing
-- `bun test` - Run all tests
+- `bun test` - Run all tests (273 tests across 15 files)
 - `bun test test/unit` - Run unit tests only
 - `bun test test/integration` - Run integration tests only
 - `bun test --coverage` - Run tests with coverage report
@@ -32,31 +32,91 @@ Bun-based email signup API built with Fastify, TypeScript, Google Sheets, and Di
 - `bunx biome check --write .` - Auto-fix issues
 - `bunx biome format --write .` - Format files
 
-Biome config includes strict rules: `noForEach`, `useLiteralKeys`, `noExplicitAny`, `noNonNullAssertion`. Organize imports is enabled as an assist action.
+Biome config includes strict rules: `noForEach`, `useLiteralKeys`, `noExplicitAny` (except test mocks), `noNonNullAssertion`. Organize imports is enabled as an assist action.
 
 ## Architecture
 
 ### Layered Architecture with Dependency Injection
 
 ```
-Request → Fastify Routes → Handlers (business logic) → Services (external integrations)
+Request → Elysia Routes → Handlers (business logic) → Services (external integrations)
 ```
 
-**Key Pattern**: Route handlers in `src/routes/handlers.ts` are extracted from Fastify routes for testability. They accept a `SignupContext` interface for dependency injection, allowing unit tests to provide mock services.
+**Key Pattern**: Route handlers in `src/routes/handlers.ts` are extracted from Elysia routes for testability. They accept a `SignupContext` interface for dependency injection, allowing unit tests to provide mock services.
 
-- `src/routes/signup.ts` - Fastify route definitions with Zod type provider
-- `src/routes/handlers.ts` - Pure business logic functions (not coupled to Fastify)
+- `src/app.ts` - Elysia application factory with CORS, security, logging, metrics, error handling
+- `src/routes/signup.elysia.ts` - Elysia route definitions with Zod validation
+- `src/routes/handlers.ts` - Pure business logic functions (not coupled to Elysia)
 - `src/services/sheets.ts` - Google Sheets integration (cached client instance)
-- `src/services/discord.ts` - Discord webhook notifications (fire-and-forget)
+- `src/services/turnstile.ts` - Cloudflare Turnstile verification
+- `src/services/metrics.ts` - Prometheus metrics collection
 - `src/schemas/signup.ts` - Zod validation schemas for all request/response types
+- `src/static/html-form.ts` - HTML form content
+- `src/static/embed-script.ts` - Embeddable JavaScript widget
+
+### Elysia-Specific Patterns
+
+**Route Definition**: Uses Elysia's chainable API with `.group()` for route prefixes:
+```typescript
+app.group("/api", (app) =>
+  app.get("/health", () => handleHealthCheck().data)
+     .post("/signup", async ({ body, context }) => handleSignup(body, context), {
+       body: signupSchema,
+     })
+)
+```
+
+**Testing**: Uses Elysia's `handle()` method with Web Standard Request objects:
+```typescript
+const app = await getTestApp();
+const response = await app.handle(new Request("http://localhost/api/health"));
+expect(response.status).toBe(200);
+```
+
+**Error Handling**: Global `onError` hook catches validation errors and formats responses consistently.
+
+**Feature Flags**: Uses `beforeHandle` guards to conditionally enable routes based on config flags.
 
 ### Configuration
 
 `src/config.ts` uses Zod to validate environment variables on startup. The config is cached and exported via a Proxy for backwards compatibility. In tests, call `clearConfigCache()` before setting environment variables.
 
+Feature flags (via environment variables):
+- `ENABLE_EXTENDED_SIGNUP` - Enable extended signup endpoint (default: true)
+- `ENABLE_BULK_SIGNUP` - Enable bulk signup endpoint (default: true)
+- `ENABLE_METRICS` - Enable Prometheus metrics endpoint (default: true)
+
 ### Testing Patterns
 
-**Integration tests** use Fastify's `inject()` method for fast HTTP simulation without spawning a server. See `test/helpers/test-app.ts` for the test app setup.
+**Integration tests** use Elysia's `handle()` method for fast HTTP simulation without spawning a server. See `test/helpers/test-app-elysia.ts` for the test app setup.
+
+**Test helpers** available:
+- `getTestApp(overrides?)` - Create a test Elysia app with optional context overrides
+- `createGetRequest(path)` - Create a GET request
+- `createPostRequest(path, body)` - Create a POST request with JSON body
+- `parseJsonResponse<T>(response)` - Parse JSON response with type safety
+- `VALID_TURNSTILE_TOKEN` - Cloudflare test token that always validates
+
+**Test isolation**: Each test creates a fresh app instance. Mocks are reset in `beforeEach()` hooks.
+
+### Type-Safe Routing with Zod
+
+The project uses Zod schemas for runtime validation and TypeScript type inference. Elysia automatically infers handler parameter types from the schemas:
+
+```typescript
+import { signupSchema } from "../schemas/signup";
+
+app.post("/signup", async ({ body }) => {
+  // `body` is automatically typed to z.infer<typeof signupSchema>
+  return handleSignup(body, context);
+}, {
+  body: signupSchema,
+});
+```
+
+### Async Error Handling
+
+All service calls are awaited. Errors are caught and logged without failing the request. Metrics are recorded for both successful and failed requests in `onAfterHandle` and `onError` hooks.
 
 **Unit tests** mock services using the `SignupContext` interface. See `test/mocks/discord.ts` and `test/mocks/sheets.ts` for example mocks.
 

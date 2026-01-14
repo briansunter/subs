@@ -77,6 +77,22 @@ See the [Google Sheets Setup](/guide/google-sheets) guide for detailed instructi
 
 ## Development
 
+### Choose Your Development Environment
+
+**Option 1: Local Development (Bun)**
+```bash
+bun run dev
+```
+Server runs at `http://localhost:3000` with hot reload.
+
+**Option 2: Cloudflare Workers Development**
+```bash
+bun run dev:workers
+```
+Server runs at `http://localhost:8787` using Wrangler for Workers testing.
+
+See the [Deployment Guide](/guide/deployment#1-cloudflare-workers-deployment-recommended) for more Cloudflare Workers information.
+
 ### Start the Development Server
 
 ```bash
@@ -162,14 +178,16 @@ Check your Google Sheet - the signup should appear in the "Sheet1" tab.
 subs/
 ├── src/
 │   ├── config.ts              # Environment configuration
+│   ├── app.ts                 # Base Elysia app factory
+│   ├── index.worker.ts        # Cloudflare Worker entry point
 │   ├── routes/
-│   │   ├── signup.ts          # Fastify route definitions
+│   │   ├── signup.elysia.ts   # Elysia route definitions
 │   │   └── handlers.ts        # Business logic
 │   ├── schemas/
 │   │   └── signup.ts          # Zod validation schemas
 │   ├── services/
 │   │   ├── sheets.ts          # Google Sheets integration
-│   │   └── discord.ts         # Discord webhook service
+│   │   └── metrics.ts         # Prometheus metrics
 │   └── utils/
 │       └── logger.ts          # Pino logging
 ├── test/                      # Test files
@@ -178,7 +196,8 @@ subs/
 │   ├── mocks/                 # Mock services
 │   └── helpers/               # Test helpers
 ├── docs/                      # VitePress documentation
-├── index.ts                   # Server entry point
+├── index.ts                   # Server entry point (Docker/Bun)
+├── wrangler.toml              # Cloudflare Workers configuration
 ├── Dockerfile                 # Docker configuration
 ├── docker-compose.yml         # Docker Compose configuration
 ├── .env.example               # Environment variables template
@@ -189,8 +208,12 @@ subs/
 
 | Command | Description |
 |---------|-------------|
-| `bun run dev` | Start development server with hot reload |
-| `bun run start` | Start production server |
+| `bun run dev` | Start development server (Docker/Bun) with hot reload |
+| `bun run start` | Start production server (Docker/Bun) |
+| `bun run dev:workers` | Start Cloudflare Workers development server |
+| `bun run deploy:workers` | Deploy to Cloudflare Workers |
+| `bun run workers:tail` | View real-time logs from deployed Workers |
+| `bun run workers:secret` | Set a Workers secret (prompts for name/value) |
 | `bun test` | Run all tests |
 | `bun test test/unit` | Run unit tests only |
 | `bun test test/integration` | Run integration tests only |

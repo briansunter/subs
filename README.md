@@ -1,12 +1,13 @@
 # subs
 
+[![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/briansunter/subs)
 ![CI/CD](https://img.shields.io/github/actions/workflow/status/briansunter/subs/test.yml?branch=main)
 ![Version](https://img.shields.io/npm/v/subs)
 ![License](https://img.shields.io/github/license/briansunter/subs)
 ![Bun](https://img.shields.io/badge/Bun-%3E%3D1.0.0-black)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.0.0-blue)
 
-Production-ready email signup API with invisible bot protection. Built with Bun, Fastify, Google Sheets, Discord webhooks, and TypeScript.
+Production-ready email signup API with invisible bot protection. Built with Bun, ElysiaJS, Google Sheets, and TypeScript.
 
 ## Why subs?
 
@@ -35,7 +36,6 @@ Production-ready email signup API with invisible bot protection. Built with Bun,
 - **Smart Email Collection** - Validate, deduplicate, and store emails with automatic sync
 - **Zod Validation** - 100% type-safe request validation with compile-time guarantees
 - **Google Sheets Integration** - Store signups in configurable sheet tabs with automatic creation
-- **Discord Notifications** - Real-time webhook alerts for new signups and errors
 - **Cloudflare Turnstile** - Invisible bot protection that blocks 99% of spam
 - **Flexible Embedding** - iframe, inline, direct POST, or JavaScript SDK
 - **Prometheus Metrics** - Production observability with comprehensive metrics
@@ -43,6 +43,7 @@ Production-ready email signup API with invisible bot protection. Built with Bun,
 - **CORS Support** - Configurable origins for secure cross-origin requests
 - **TypeScript Logging** - Structured logging with Pino for production debugging
 - **Docker Support** - Multi-stage build with optimized standalone binary
+- **Cloudflare Workers Support** - Edge deployment with automatic scaling (NEW!)
 - **Comprehensive Tests** - Unit and integration tests with high coverage
 
 ## Documentation
@@ -51,7 +52,6 @@ Full documentation is available at **[https://briansunter.github.io/subs](https:
 
 - **[Getting Started](https://briansunter.github.io/subs/guide/getting-started)** - Quick setup guide
 - **[Google Sheets Setup](https://briansunter.github.io/subs/guide/google-sheets)** - Complete Google Sheets configuration
-- **[Discord Setup](https://briansunter.github.io/subs/guide/discord)** - Configure Discord notifications
 - **[HTML Form Integration](https://briansunter.github.io/subs/guide/integration)** - Embed forms on your website
 - **[API Reference](https://briansunter.github.io/subs/guide/api)** - Complete API documentation
 - **[Deployment](https://briansunter.github.io/subs/guide/deployment)** - Deploy to production
@@ -262,23 +262,6 @@ Each row in your sheet will contain:
 
 For detailed Google Sheets setup instructions, see **[Google Sheets Setup Guide](https://briansunter.github.io/subs/guide/google-sheets)**.
 
-## Discord Notifications
-
-To enable Discord notifications:
-
-1. Create a Discord webhook in your server settings
-2. Add the webhook URL to your `.env`:
-   ```bash
-   DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/...
-   ```
-
-You'll receive notifications for:
-- New signups (with user details)
-- Bulk signup completions
-- Errors
-
-For complete Discord setup instructions, see **[Discord Setup Guide](https://briansunter.github.io/subs/guide/discord)**.
-
 ## Docker Deployment
 
 ### Build and Run with Docker Compose
@@ -314,20 +297,87 @@ docker run -d \
 
 For more deployment options (VPS, Render, Railway, Fly.io), see **[Deployment Guide](https://briansunter.github.io/subs/guide/deployment)**.
 
+## Cloudflare Workers Deployment
+
+Cloudflare Workers provides edge deployment with automatic scaling and global distribution.
+
+### Prerequisites
+
+1. Install Wrangler CLI:
+   ```bash
+   bun install
+   bunx wrangler login
+   ```
+
+2. Create `.dev.vars` for local development:
+   ```bash
+   cp .env.example .dev.vars
+   # Edit .dev.vars with your values
+   ```
+
+3. Set production secrets:
+   ```bash
+   bun run workers:secret GOOGLE_SHEET_ID
+   bun run workers:secret GOOGLE_CREDENTIALS_EMAIL
+   bun run workers:secret GOOGLE_PRIVATE_KEY
+   bun run workers:secret CLOUDFLARE_TURNSTILE_SECRET_KEY
+   ```
+
+### Local Development
+
+```bash
+# Start Workers development server
+bun run dev:workers
+
+# Your Worker is available at http://localhost:8787
+```
+
+### Production Deployment
+
+```bash
+# Deploy to Cloudflare Workers
+bun run deploy:workers
+
+# View real-time logs
+bun run workers:tail
+```
+
+### Deployment Comparison
+
+| Platform | Best For | Latency | Cost | Scaling |
+|----------|----------|---------|------|---------|
+| **Cloudflare Workers** | Global edge deployment, high traffic | ~10ms worldwide | Free tier + pay-per-request | Automatic |
+| **Docker** | Self-hosted, private cloud, VPS | Varies by region | Server cost | Manual |
+
+**When to use Cloudflare Workers**:
+- You need global edge deployment
+- Want automatic scaling and DDoS protection
+- Prefer pay-per-use pricing
+- Don't need filesystem access
+
+**When to use Docker**:
+- Need to self-host on private infrastructure
+- Require custom server configuration
+- Need to run alongside other containers
+- Prefer fixed-cost pricing
+
+For complete Cloudflare Workers setup instructions, see **[Deployment Guide](https://briansunter.github.io/subs/guide/deployment#cloudflare-workers)**.
+
 ## Project Structure
 
 ```
 subs/
 ├── src/
 │   ├── config.ts              # Environment configuration
+│   ├── app.ts                 # Base Elysia app factory
+│   ├── index.worker.ts        # Cloudflare Worker entry point
 │   ├── routes/
-│   │   ├── signup.ts          # API routes
+│   │   ├── signup.elysia.ts   # Elysia route definitions
 │   │   └── handlers.ts        # Business logic
 │   ├── schemas/
 │   │   └── signup.ts          # Zod validation schemas
 │   ├── services/
-│   │   ├── sheets.ts          # Google Sheets integration
-│   │   └── discord.ts         # Discord webhook service
+│   │   └── sheets.ts          # Google Sheets integration
 │   └── utils/
 │       └── logger.ts          # Pino logging
 ├── test/                      # Comprehensive tests
@@ -337,6 +387,7 @@ subs/
 │   └── helpers/               # Test helpers
 ├── docs/                      # VitePress documentation
 ├── index.ts                   # Server entry point
+├── wrangler.toml              # Cloudflare Workers configuration
 ├── Dockerfile                 # Multi-stage Docker build
 ├── docker-compose.yml         # Docker Compose configuration
 ├── .env.example               # Environment variables template
@@ -403,11 +454,6 @@ lsof -ti:3000 | xargs kill -9
 - Verify the sheet is shared with the service account email
 - Set permission to "Editor" (not just "Viewer")
 - Wait a few minutes for permissions to propagate
-
-**Discord notifications not appearing**:
-- Verify the `DISCORD_WEBHOOK_URL` is set correctly
-- Test the webhook URL directly with curl
-- Check that the webhook still exists in Discord
 
 For more troubleshooting help, see **[Troubleshooting Guide](https://briansunter.github.io/subs/guide/troubleshooting)**.
 

@@ -21,9 +21,6 @@ const envSchema = z.object({
   GOOGLE_PRIVATE_KEY: z.string().min(1, "GOOGLE_PRIVATE_KEY is required"),
   DEFAULT_SHEET_TAB: z.string().default("Sheet1"),
 
-  // Discord (optional)
-  DISCORD_WEBHOOK_URL: z.string().optional(),
-
   // Cloudflare Turnstile (optional)
   CLOUDFLARE_TURNSTILE_SECRET_KEY: z.string().optional(),
   CLOUDFLARE_TURNSTILE_SITE_KEY: z.string().optional(),
@@ -51,10 +48,6 @@ const envSchema = z.object({
     .string()
     .default("true")
     .transform((val) => val.toLowerCase() === "true"),
-  ENABLE_DISCORD_NOTIFICATIONS: z
-    .string()
-    .default("true")
-    .transform((val) => val.toLowerCase() === "true"),
 });
 
 export interface SignupConfig {
@@ -68,9 +61,6 @@ export interface SignupConfig {
   googlePrivateKey: string;
   defaultSheetTab: string;
 
-  // Discord
-  discordWebhookUrl?: string;
-
   // Cloudflare Turnstile
   turnstileSecretKey?: string;
   turnstileSiteKey?: string;
@@ -82,7 +72,6 @@ export interface SignupConfig {
   enableExtendedSignup: boolean;
   enableBulkSignup: boolean;
   enableMetrics: boolean;
-  enableDiscordNotifications: boolean;
 }
 
 function loadEnv(): SignupConfig {
@@ -99,14 +88,12 @@ function loadEnv(): SignupConfig {
     googleCredentialsEmail: env.GOOGLE_CREDENTIALS_EMAIL,
     googlePrivateKey: formattedPrivateKey,
     defaultSheetTab: env.DEFAULT_SHEET_TAB,
-    discordWebhookUrl: env.DISCORD_WEBHOOK_URL,
     turnstileSecretKey: env.CLOUDFLARE_TURNSTILE_SECRET_KEY,
     turnstileSiteKey: env.CLOUDFLARE_TURNSTILE_SITE_KEY,
     allowedOrigins: env.ALLOWED_ORIGINS,
     enableExtendedSignup: env.ENABLE_EXTENDED_SIGNUP,
     enableBulkSignup: env.ENABLE_BULK_SIGNUP,
     enableMetrics: env.ENABLE_METRICS,
-    enableDiscordNotifications: env.ENABLE_DISCORD_NOTIFICATIONS,
   };
 }
 

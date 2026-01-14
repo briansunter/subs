@@ -8,8 +8,7 @@ const base = process.env.DOCS_BASE || "/";
 export default defineConfig({
   base,
   title: "subs",
-  description:
-    "Production-ready email signup API with invisible bot protection, Google Sheets, and Discord notifications",
+  description: "Production-ready email signup API with invisible bot protection and Google Sheets",
 
   // Ignore dead links during build
   ignoreDeadLinks: true,
@@ -31,7 +30,6 @@ export default defineConfig({
         items: [
           { text: "Getting Started", link: "/guide/getting-started" },
           { text: "Google Sheets Setup", link: "/guide/google-sheets" },
-          { text: "Discord Setup", link: "/guide/discord" },
           { text: "Cloudflare Turnstile", link: "/guide/turnstile" },
           { text: "Prometheus Metrics", link: "/guide/prometheus" },
           { text: "HTML Form Integration", link: "/guide/integration" },

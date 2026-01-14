@@ -7,8 +7,16 @@ import { Counter, collectDefaultMetrics, Gauge, Histogram, Registry } from "prom
 // Create a Registry for our metrics
 export const register = new Registry();
 
-// Collect default metrics (CPU, memory, etc.)
-collectDefaultMetrics({ register });
+// Collect default metrics (CPU, memory, etc.) only in Node.js/Bun environment
+// Skip in Cloudflare Workers where these APIs are not available
+try {
+  // Try to access a Node.js-specific API to detect environment
+  if (typeof process === "object" && process !== null) {
+    collectDefaultMetrics({ register });
+  }
+} catch {
+  // Running in Cloudflare Workers, skip default metrics
+}
 
 // HTTP request metrics
 export const httpRequestDurationMicroseconds = new Histogram({
@@ -55,14 +63,6 @@ export const sheetsRequestDurationSeconds = new Histogram({
   help: "Duration of Google Sheets API requests in seconds",
   labelNames: ["operation"],
   buckets: [0.5, 1, 2, 5, 10, 30],
-  registers: [register],
-});
-
-// Discord webhook metrics
-export const discordWebhookTotal = new Counter({
-  name: "discord_webhook_total",
-  help: "Total number of Discord webhook notifications",
-  labelNames: ["type", "status"],
   registers: [register],
 });
 
@@ -115,13 +115,6 @@ export function recordSignup(endpoint: string, success: boolean, duration: numbe
 export function recordSheetsRequest(operation: string, success: boolean, duration: number): void {
   sheetsRequestsTotal.inc({ operation, status: success ? "success" : "error" });
   sheetsRequestDurationSeconds.observe({ operation }, duration);
-}
-
-/**
- * Record Discord webhook metrics
- */
-export function recordDiscordWebhook(type: string, success: boolean): void {
-  discordWebhookTotal.inc({ type, status: success ? "success" : "error" });
 }
 
 /**

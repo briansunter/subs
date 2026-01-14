@@ -17,7 +17,6 @@ describe("Configuration - Unit Tests", () => {
         key.startsWith("GOOGLE_") ||
         key === "PORT" ||
         key === "HOST" ||
-        key === "DISCORD_WEBHOOK_URL" ||
         key === "ALLOWED_ORIGINS" ||
         key === "DEFAULT_SHEET_TAB" ||
         key === "NODE_ENV" ||
@@ -165,27 +164,6 @@ describe("Configuration - Unit Tests", () => {
       const config = getConfig();
 
       expect(config.defaultSheetTab).toBe("CustomTab");
-    });
-
-    test("should handle DISCORD_WEBHOOK_URL when provided", () => {
-      process.env["GOOGLE_SHEET_ID"] = "test";
-      process.env["GOOGLE_CREDENTIALS_EMAIL"] = "test@example.com";
-      process.env["GOOGLE_PRIVATE_KEY"] = "test";
-      process.env["DISCORD_WEBHOOK_URL"] = "https://discord.com/webhook/test";
-
-      const config = getConfig();
-
-      expect(config.discordWebhookUrl).toBe("https://discord.com/webhook/test");
-    });
-
-    test("should handle missing DISCORD_WEBHOOK_URL", () => {
-      process.env["GOOGLE_SHEET_ID"] = "test";
-      process.env["GOOGLE_CREDENTIALS_EMAIL"] = "test@example.com";
-      process.env["GOOGLE_PRIVATE_KEY"] = "test";
-
-      const config = getConfig();
-
-      expect(config.discordWebhookUrl).toBeUndefined();
     });
   });
 

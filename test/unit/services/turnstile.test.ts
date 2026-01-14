@@ -5,6 +5,7 @@
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { verifyTurnstileToken } from "../../../src/services/turnstile";
+import { getRequestBody, mockGlobalFetch } from "../../helpers/test-app-elysia";
 
 // Store original fetch
 const originalFetch = global.fetch;
@@ -31,14 +32,16 @@ function resetFetchCalls(): void {
 }
 
 function createMockFetch(response: Response): typeof fetch {
-  return ((url: string, options?: RequestInit) => {
+  const fetchImpl = (url: string | Request, options?: RequestInit) => {
     // Always get fresh reference to fetchCalls
     const fetchCalls = getFetchCalls();
-    fetchCalls.push({ url, options: options || {} });
+    fetchCalls.push({ url: url.toString(), options: options || {} });
 
     // Return the provided response
     return Promise.resolve(response);
-  }) as unknown as typeof fetch;
+  };
+  mockGlobalFetch(fetchImpl);
+  return fetchImpl as typeof fetch;
 }
 
 describe("Turnstile Service - Unit Tests", () => {
@@ -86,7 +89,7 @@ describe("Turnstile Service - Unit Tests", () => {
         "Content-Type": "application/json",
       });
 
-      const body = JSON.parse((fetchCalls[0]?.options.body as string) ?? "{}");
+      const body = getRequestBody(fetchCalls[0]?.options);
       expect(body.secret).toBe(mockSecret);
       expect(body.response).toBe(mockToken);
     });
@@ -267,8 +270,7 @@ describe("Turnstile Service - Unit Tests", () => {
 
   describe("verifyTurnstileToken - Network Errors", () => {
     test("should handle network connection error", async () => {
-      global.fetch = (() =>
-        Promise.reject(new Error("Network connection failed"))) as unknown as typeof fetch;
+      mockGlobalFetch(() => Promise.reject(new Error("Network connection failed")));
 
       const result = await verifyTurnstileToken(mockToken, mockSecret);
 
@@ -288,7 +290,8 @@ describe("Turnstile Service - Unit Tests", () => {
     });
 
     test("should handle DNS resolution error", async () => {
-      global.fetch = (() => Promise.reject(new Error("ECONNREFUSED"))) as unknown as typeof fetch;
+      globalThis.fetch = (() =>
+        Promise.reject(new Error("ECONNREFUSED"))) as unknown as typeof fetch;
 
       const result = await verifyTurnstileToken(mockToken, mockSecret);
 
@@ -297,7 +300,7 @@ describe("Turnstile Service - Unit Tests", () => {
     });
 
     test("should handle generic error", async () => {
-      global.fetch = (() => Promise.reject("Some string error")) as unknown as typeof fetch;
+      globalThis.fetch = (() => Promise.reject("Some string error")) as unknown as typeof fetch;
 
       const result = await verifyTurnstileToken(mockToken, mockSecret);
 
@@ -322,7 +325,7 @@ describe("Turnstile Service - Unit Tests", () => {
       await verifyTurnstileToken("test_token", "test_secret");
 
       const fetchCalls = getFetchCalls();
-      const body = JSON.parse((fetchCalls[0]?.options.body as string) ?? "{}");
+      const body = getRequestBody(fetchCalls[0]?.options);
 
       expect(body).toEqual({
         secret: "test_secret",
@@ -401,7 +404,7 @@ describe("Turnstile Service - Unit Tests", () => {
       expect(result.success).toBe(true);
 
       const fetchCalls = getFetchCalls();
-      const body = JSON.parse((fetchCalls[0]?.options.body as string) ?? "{}");
+      const body = getRequestBody(fetchCalls[0]?.options);
       expect(body.response).toBe(specialToken);
     });
 

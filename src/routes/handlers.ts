@@ -3,6 +3,7 @@
  * Extracted from Fastify routes for testability
  */
 
+import type { z } from "zod";
 import { getConfig, type SignupConfig } from "../config";
 import {
   type BulkSignupInput,
@@ -12,9 +13,7 @@ import {
   type SignupInput,
   signupSchema,
 } from "../schemas/signup";
-import { sendErrorNotification, sendSignupNotification } from "../services/discord";
 import {
-  recordDiscordWebhook,
   recordSheetsRequest,
   recordSignup,
   recordTurnstileVerification,
@@ -34,10 +33,6 @@ export interface SignupContext {
     appendSignup: typeof appendSignup;
     emailExists: typeof emailExists;
   };
-  discord: {
-    sendSignupNotification: typeof sendSignupNotification;
-    sendErrorNotification: typeof sendErrorNotification;
-  };
   turnstile: {
     verifyTurnstileToken: typeof verifyTurnstileToken;
   };
@@ -51,7 +46,6 @@ export function createDefaultContext(): SignupContext {
   const currentConfig = getConfig();
   return {
     sheets: { appendSignup, emailExists },
-    discord: { sendSignupNotification, sendErrorNotification },
     turnstile: { verifyTurnstileToken },
     config: currentConfig,
   };
@@ -116,30 +110,49 @@ async function validateTurnstileToken(
 }
 
 /**
+ * Validate and transform input using Zod
+ * Elysia validates in routes, but handlers also validate for:
+ * 1. Unit tests that call handlers directly
+ * 2. Applying transformations (like .toLowerCase(), .trim())
+ */
+function validateAndTransformSignup<T>(
+  data: unknown,
+  schema: z.ZodSchema<T>,
+): { success: true; data: T } | { success: false; result: HandlerResult } {
+  const validationResult = schema.safeParse(data);
+  if (!validationResult.success) {
+    const details = validationResult.error.issues.map(
+      (e) => `${e.path.join(".") || "field"}: ${e.message}`,
+    );
+    return {
+      success: false,
+      result: {
+        success: false,
+        statusCode: 400,
+        error: "Validation failed",
+        details,
+      },
+    };
+  }
+  return { success: true, data: validationResult.data };
+}
+
+/**
  * Handle basic signup
  */
 export async function handleSignup(data: SignupInput, ctx: SignupContext): Promise<HandlerResult> {
   const startTime = Date.now();
-  let _success = false;
+
+  // Validate and apply transformations (email lowercasing, trimming)
+  const validation = validateAndTransformSignup(data, signupSchema);
+  if (!validation.success) {
+    return validation.result;
+  }
+  const { email, sheetTab, metadata, turnstileToken } = validation.data;
 
   try {
-    // Validate input with Zod
-    const validationResult = signupSchema.safeParse(data);
-    if (!validationResult.success) {
-      const errors: string[] = [];
-      for (const e of validationResult.error.issues) {
-        errors.push(`${e.path.join(".")}: ${e.message}`);
-      }
-      return {
-        success: false,
-        statusCode: 400,
-        error: "Validation failed",
-        details: errors,
-      };
-    }
-
     // Validate Turnstile token if configured
-    const turnstileResult = await validateTurnstileToken(validationResult.data.turnstileToken, ctx);
+    const turnstileResult = await validateTurnstileToken(turnstileToken, ctx);
     if (turnstileResult) {
       return turnstileResult;
     }
@@ -148,11 +161,7 @@ export async function handleSignup(data: SignupInput, ctx: SignupContext): Promi
     const sheetsStartTime = Date.now();
     let exists = false;
     try {
-      exists = await ctx.sheets.emailExists(
-        validationResult.data.email,
-        validationResult.data.sheetTab,
-        ctx.config,
-      );
+      exists = await ctx.sheets.emailExists(email, sheetTab, ctx.config);
       recordSheetsRequest("emailExists", true, (Date.now() - sheetsStartTime) / 1000);
     } catch (error) {
       recordSheetsRequest("emailExists", false, (Date.now() - sheetsStartTime) / 1000);
@@ -172,12 +181,10 @@ export async function handleSignup(data: SignupInput, ctx: SignupContext): Promi
     try {
       await ctx.sheets.appendSignup(
         {
-          email: validationResult.data.email,
+          email,
           timestamp: new Date().toISOString(),
-          sheetTab: validationResult.data.sheetTab || ctx.config.defaultSheetTab,
-          metadata: validationResult.data.metadata
-            ? JSON.stringify(validationResult.data.metadata)
-            : undefined,
+          sheetTab: sheetTab || ctx.config.defaultSheetTab,
+          metadata: metadata ? JSON.stringify(metadata) : undefined,
         },
         ctx.config,
       );
@@ -187,28 +194,8 @@ export async function handleSignup(data: SignupInput, ctx: SignupContext): Promi
       throw error; // Re-throw to be caught by outer handler
     }
 
-    // Send Discord notification (non-blocking, errors ignored)
-    if (ctx.config.enableDiscordNotifications && ctx.config.discordWebhookUrl) {
-      void ctx.discord
-        .sendSignupNotification(
-          {
-            email: validationResult.data.email,
-            sheetTab: validationResult.data.sheetTab || ctx.config.defaultSheetTab,
-          },
-          ctx.config.discordWebhookUrl,
-        )
-        .then(() => {
-          recordDiscordWebhook("signup", true);
-        })
-        .catch((err) => {
-          recordDiscordWebhook("signup", false);
-          logger.error({ error: err }, "Failed to send Discord notification");
-        });
-    }
+    logger.info({ email }, "New signup processed");
 
-    logger.info({ email: validationResult.data.email }, "New signup processed");
-
-    _success = true;
     const duration = (Date.now() - startTime) / 1000;
     recordSignup("/api/signup", true, duration);
 
@@ -222,25 +209,6 @@ export async function handleSignup(data: SignupInput, ctx: SignupContext): Promi
 
     const duration = (Date.now() - startTime) / 1000;
     recordSignup("/api/signup", false, duration);
-
-    // Send error notification to Discord (non-blocking)
-    if (ctx.config.enableDiscordNotifications && ctx.config.discordWebhookUrl) {
-      void ctx.discord
-        .sendErrorNotification(
-          {
-            message: "Signup processing failed",
-            context: { error: String(error) },
-          },
-          ctx.config.discordWebhookUrl,
-        )
-        .then(() => {
-          recordDiscordWebhook("error", true);
-        })
-        .catch((err) => {
-          recordDiscordWebhook("error", false);
-          logger.error({ error: err }, "Failed to send error notification");
-        });
-    }
 
     return {
       success: false,
@@ -258,26 +226,17 @@ export async function handleExtendedSignup(
   ctx: SignupContext,
 ): Promise<HandlerResult> {
   const startTime = Date.now();
-  let _success = false;
+
+  // Validate and apply transformations
+  const validation = validateAndTransformSignup(data, extendedSignupSchema);
+  if (!validation.success) {
+    return validation.result;
+  }
+  const { email, sheetTab, name, source, tags, metadata, turnstileToken } = validation.data;
 
   try {
-    // Validate input with Zod
-    const validationResult = extendedSignupSchema.safeParse(data);
-    if (!validationResult.success) {
-      const errors: string[] = [];
-      for (const e of validationResult.error.issues) {
-        errors.push(`${e.path.join(".")}: ${e.message}`);
-      }
-      return {
-        success: false,
-        statusCode: 400,
-        error: "Validation failed",
-        details: errors,
-      };
-    }
-
     // Validate Turnstile token if configured
-    const turnstileResult = await validateTurnstileToken(validationResult.data.turnstileToken, ctx);
+    const turnstileResult = await validateTurnstileToken(turnstileToken, ctx);
     if (turnstileResult) {
       return turnstileResult;
     }
@@ -286,11 +245,7 @@ export async function handleExtendedSignup(
     const sheetsStartTime = Date.now();
     let exists = false;
     try {
-      exists = await ctx.sheets.emailExists(
-        validationResult.data.email,
-        validationResult.data.sheetTab,
-        ctx.config,
-      );
+      exists = await ctx.sheets.emailExists(email, sheetTab, ctx.config);
       recordSheetsRequest("emailExists", true, (Date.now() - sheetsStartTime) / 1000);
     } catch (error) {
       recordSheetsRequest("emailExists", false, (Date.now() - sheetsStartTime) / 1000);
@@ -309,45 +264,20 @@ export async function handleExtendedSignup(
     const appendStartTime = Date.now();
     await ctx.sheets.appendSignup(
       {
-        email: validationResult.data.email,
+        email,
         timestamp: new Date().toISOString(),
-        sheetTab: validationResult.data.sheetTab || ctx.config.defaultSheetTab,
-        name: validationResult.data.name,
-        source: validationResult.data.source,
-        tags: validationResult.data.tags,
-        metadata: validationResult.data.metadata
-          ? JSON.stringify(validationResult.data.metadata)
-          : undefined,
+        sheetTab: sheetTab || ctx.config.defaultSheetTab,
+        name,
+        source,
+        tags,
+        metadata: metadata ? JSON.stringify(metadata) : undefined,
       },
       ctx.config,
     );
     recordSheetsRequest("appendSignup", true, (Date.now() - appendStartTime) / 1000);
 
-    // Send Discord notification (non-blocking)
-    if (ctx.config.enableDiscordNotifications && ctx.config.discordWebhookUrl) {
-      void ctx.discord
-        .sendSignupNotification(
-          {
-            email: validationResult.data.email,
-            sheetTab: validationResult.data.sheetTab || ctx.config.defaultSheetTab,
-            name: validationResult.data.name,
-            source: validationResult.data.source,
-            tags: validationResult.data.tags,
-          },
-          ctx.config.discordWebhookUrl,
-        )
-        .then(() => {
-          recordDiscordWebhook("signup", true);
-        })
-        .catch((err) => {
-          recordDiscordWebhook("signup", false);
-          logger.error({ error: err }, "Failed to send Discord notification");
-        });
-    }
+    logger.info({ email }, "Extended signup processed");
 
-    logger.info({ email: validationResult.data.email }, "Extended signup processed");
-
-    _success = true;
     const duration = (Date.now() - startTime) / 1000;
     recordSignup("/api/signup/extended", true, duration);
 
@@ -361,25 +291,6 @@ export async function handleExtendedSignup(
 
     const duration = (Date.now() - startTime) / 1000;
     recordSignup("/api/signup/extended", false, duration);
-
-    // Send error notification to Discord (non-blocking)
-    if (ctx.config.enableDiscordNotifications && ctx.config.discordWebhookUrl) {
-      void ctx.discord
-        .sendErrorNotification(
-          {
-            message: "Extended signup processing failed",
-            context: { error: String(error) },
-          },
-          ctx.config.discordWebhookUrl,
-        )
-        .then(() => {
-          recordDiscordWebhook("error", true);
-        })
-        .catch((err) => {
-          recordDiscordWebhook("error", false);
-          logger.error({ error: err }, "Failed to send error notification");
-        });
-    }
 
     return {
       success: false,
@@ -398,30 +309,27 @@ export async function handleBulkSignup(
 ): Promise<HandlerResult> {
   const startTime = Date.now();
 
-  try {
-    // Validate input with Zod
-    const validationResult = bulkSignupSchema.safeParse(data);
-    if (!validationResult.success) {
-      const errors: string[] = [];
-      for (const e of validationResult.error.issues) {
-        errors.push(`${e.path.join(".")}: ${e.message}`);
-      }
-      return {
-        success: false,
-        statusCode: 400,
-        error: "Validation failed",
-        details: errors,
-      };
-    }
+  // Validate and apply transformations
+  const validation = validateAndTransformSignup(data, bulkSignupSchema);
+  if (!validation.success) {
+    return validation.result;
+  }
+  const { signups } = validation.data;
 
-    const results = {
+  try {
+    const results: {
+      success: number;
+      failed: number;
+      duplicates: number;
+      errors: string[];
+    } = {
       success: 0,
       failed: 0,
       duplicates: 0,
-      errors: [] as string[],
+      errors: [],
     };
 
-    for (const signup of validationResult.data.signups) {
+    for (const signup of signups) {
       try {
         // Check if email already exists
         const sheetsStartTime = Date.now();
@@ -449,6 +357,7 @@ export async function handleBulkSignup(
         results.success++;
       } catch (error) {
         results.failed++;
+        logger.error({ error, email: signup.email }, "Individual signup failed in bulk operation");
         results.errors.push(`${signup.email}: ${String(error)}`);
       }
     }
@@ -472,25 +381,6 @@ export async function handleBulkSignup(
 
     const duration = (Date.now() - startTime) / 1000;
     recordSignup("/api/signup/bulk", false, duration);
-
-    // Send error notification to Discord (non-blocking)
-    if (ctx.config.enableDiscordNotifications && ctx.config.discordWebhookUrl) {
-      void ctx.discord
-        .sendErrorNotification(
-          {
-            message: "Bulk signup processing failed",
-            context: { error: String(error) },
-          },
-          ctx.config.discordWebhookUrl,
-        )
-        .then(() => {
-          recordDiscordWebhook("error", true);
-        })
-        .catch((err) => {
-          recordDiscordWebhook("error", false);
-          logger.error({ error: err }, "Failed to send error notification");
-        });
-    }
 
     return {
       success: false,

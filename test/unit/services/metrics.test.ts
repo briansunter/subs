@@ -7,7 +7,6 @@ import { beforeEach, describe, expect, test } from "bun:test";
 import {
   decrementActiveSignups,
   incrementActiveSignups,
-  recordDiscordWebhook,
   recordHttpRequest,
   recordSheetsRequest,
   recordSignup,
@@ -57,9 +56,16 @@ describe.serial("Metrics Service - Unit Tests", () => {
       recordHttpRequest("POST", "/api/signup", 500, 0.02);
 
       const metrics = await register.metrics();
-      expect(metrics).toContain(`status_code="200"`);
-      expect(metrics).toContain(`status_code="400"`);
-      expect(metrics).toContain(`status_code="500"`);
+      // Check for specific route with each status code to avoid test isolation issues
+      expect(metrics).toContain(
+        `http_requests_total{method="POST",route="/api/signup",status_code="200"} 1`,
+      );
+      expect(metrics).toContain(
+        `http_requests_total{method="POST",route="/api/signup",status_code="400"} 1`,
+      );
+      expect(metrics).toContain(
+        `http_requests_total{method="POST",route="/api/signup",status_code="500"} 1`,
+      );
     });
   });
 
@@ -131,31 +137,6 @@ describe.serial("Metrics Service - Unit Tests", () => {
       expect(metrics).toContain(`operation="emailExists"`);
       expect(metrics).toContain(`operation="appendSignup"`);
       expect(metrics).toContain(`operation="getSignupStats"`);
-    });
-  });
-
-  describe("Discord Webhook Metrics", () => {
-    test("should record successful webhook", async () => {
-      recordDiscordWebhook("signup", true);
-
-      const metrics = await register.metrics();
-      expect(metrics).toContain(`discord_webhook_total{type="signup",status="success"} 1`);
-    });
-
-    test("should record failed webhook", async () => {
-      recordDiscordWebhook("error", false);
-
-      const metrics = await register.metrics();
-      expect(metrics).toContain(`discord_webhook_total{type="error",status="error"} 1`);
-    });
-
-    test("should track different webhook types", async () => {
-      recordDiscordWebhook("signup", true);
-      recordDiscordWebhook("error", true);
-
-      const metrics = await register.metrics();
-      expect(metrics).toContain(`type="signup"`);
-      expect(metrics).toContain(`type="error"`);
     });
   });
 

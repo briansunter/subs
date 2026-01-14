@@ -11,7 +11,6 @@ import {
   handleSignup,
   type SignupContext,
 } from "../../../src/routes/handlers";
-import { mockDiscordService } from "../../mocks/discord";
 import { mockSheetsService } from "../../mocks/sheets";
 import { mockTurnstileService } from "../../mocks/turnstile";
 
@@ -47,25 +46,11 @@ function isBulkResultData(data: unknown): data is {
   );
 }
 
-function isDiscordPayload(data: unknown): data is { embeds: Array<{ fields: unknown }> } {
-  return (
-    typeof data === "object" &&
-    data !== null &&
-    "embeds" in data &&
-    Array.isArray(data.embeds) &&
-    data.embeds.length > 0 &&
-    typeof data.embeds[0] === "object" &&
-    data.embeds[0] !== null &&
-    "fields" in data.embeds[0]
-  );
-}
-
 describe("Route Handlers - Unit Tests", () => {
   let mockContext: SignupContext;
 
   beforeEach(() => {
     mockSheetsService.reset();
-    mockDiscordService.reset();
     mockTurnstileService.reset();
 
     // Create test context with mocked services
@@ -74,16 +59,11 @@ describe("Route Handlers - Unit Tests", () => {
         appendSignup: mockSheetsService.appendSignup,
         emailExists: mockSheetsService.emailExists,
       },
-      discord: {
-        sendSignupNotification: mockDiscordService.sendSignupNotification,
-        sendErrorNotification: mockDiscordService.sendErrorNotification,
-      },
       turnstile: {
         verifyTurnstileToken: mockTurnstileService.verifyTurnstileToken,
       },
       config: {
         defaultSheetTab: "Sheet1",
-        discordWebhookUrl: "https://discord.com/api/webhooks/test",
         port: 3000,
         host: "0.0.0.0",
         googleSheetId: "test-sheet-id",
@@ -93,7 +73,6 @@ describe("Route Handlers - Unit Tests", () => {
         enableExtendedSignup: true,
         enableBulkSignup: true,
         enableMetrics: true,
-        enableDiscordNotifications: true,
       },
     };
   });
@@ -129,8 +108,6 @@ describe("Route Handlers - Unit Tests", () => {
       const sheetData = mockSheetsService.getSheetData("Sheet1");
       expect(sheetData).toHaveLength(1);
       expect(sheetData[0]?.email).toBe("test@example.com");
-
-      expect(mockDiscordService.getNotificationCount()).toBe(1);
     });
 
     test("should validate email format", async () => {
@@ -172,9 +149,6 @@ describe("Route Handlers - Unit Tests", () => {
       expect(result.success).toBe(false);
       expect(result.statusCode).toBe(500);
       expect(result.error).toBe("Internal server error");
-
-      // Should have sent error notification
-      expect(mockDiscordService.getNotificationCount()).toBeGreaterThanOrEqual(0);
     });
 
     test("should use default sheet tab when not provided", async () => {
@@ -265,7 +239,7 @@ describe("Route Handlers - Unit Tests", () => {
     });
 
     test("should include optional fields in notification", async () => {
-      await handleExtendedSignup(
+      const result = await handleExtendedSignup(
         {
           email: "jane@example.com",
           name: "Jane Doe",
@@ -276,13 +250,7 @@ describe("Route Handlers - Unit Tests", () => {
         mockContext,
       );
 
-      const lastNotification = mockDiscordService.getLastNotification();
-      expect(lastNotification).toBeDefined();
-
-      if (lastNotification && isDiscordPayload(lastNotification.payload)) {
-        expect(lastNotification.payload.embeds).toBeDefined();
-        expect(lastNotification.payload.embeds[0]?.fields).toBeDefined();
-      }
+      expect(result.success).toBe(true);
     });
 
     test("should handle missing optional fields", async () => {
@@ -404,20 +372,6 @@ describe("Route Handlers - Unit Tests", () => {
   });
 
   describe("Error Handling", () => {
-    test("should handle discord notification errors gracefully", async () => {
-      // Set Discord error but signup should still succeed
-      mockDiscordService.setError(new Error("Discord error"));
-
-      const result = await handleSignup(
-        { email: "test@example.com", sheetTab: "Sheet1" },
-        mockContext,
-      );
-
-      // Signup should still succeed (Discord is non-blocking)
-      expect(result.success).toBe(true);
-      expect(result.statusCode).toBe(200);
-    });
-
     test("should handle concurrent signups correctly", async () => {
       const results = await Promise.all([
         handleSignup({ email: "user1@example.com", sheetTab: "Sheet1" }, mockContext),
@@ -679,272 +633,6 @@ describe("Route Handlers - Unit Tests", () => {
 
       const sheetData = mockSheetsService.getSheetData("MyCustomSheet");
       expect(sheetData).toHaveLength(1);
-    });
-  });
-
-  describe("Discord Error Notification Error Paths", () => {
-    beforeEach(() => {
-      mockSheetsService.reset();
-      mockDiscordService.reset();
-      mockTurnstileService.reset();
-      mockContext = {
-        sheets: {
-          appendSignup: mockSheetsService.appendSignup,
-          emailExists: mockSheetsService.emailExists,
-        },
-        discord: {
-          sendSignupNotification: mockDiscordService.sendSignupNotification,
-          sendErrorNotification: mockDiscordService.sendErrorNotification,
-        },
-        turnstile: {
-          verifyTurnstileToken: mockTurnstileService.verifyTurnstileToken,
-        },
-        config: {
-          defaultSheetTab: "Sheet1",
-          discordWebhookUrl: "https://discord.com/api/webhooks/test",
-          port: 3000,
-          host: "0.0.0.0",
-          googleSheetId: "test-sheet-id",
-          googleCredentialsEmail: "test@example.com",
-          googlePrivateKey: "-----BEGIN PRIVATE KEY-----\ntest\n-----END PRIVATE KEY-----\n",
-          allowedOrigins: ["*"],
-          enableExtendedSignup: true,
-          enableBulkSignup: true,
-          enableMetrics: true,
-          enableDiscordNotifications: true,
-        },
-      };
-    });
-
-    test("handleSignup should send error notification when signup fails (lines 226-234)", async () => {
-      // Make sheets service fail
-      mockSheetsService.setAuthError(new Error("Sheets auth failed"));
-
-      const result = await handleSignup(
-        { email: "test@example.com", sheetTab: "Sheet1" },
-        mockContext,
-      );
-
-      expect(result.success).toBe(false);
-      expect(result.statusCode).toBe(500);
-
-      // Should have sent error notification
-      const errorNotifications = mockDiscordService.getNotificationsByType("error");
-      expect(errorNotifications.length).toBeGreaterThan(0);
-    });
-
-    test("handleSignup should handle error notification failure (lines 234-236)", async () => {
-      // Make sheets service fail
-      mockSheetsService.setAuthError(new Error("Sheets auth failed"));
-
-      // Make error notification also fail
-      mockDiscordService.setErrorNotificationError(new Error("Discord error notification failed"));
-
-      const result = await handleSignup(
-        { email: "test@example.com", sheetTab: "Sheet1" },
-        mockContext,
-      );
-
-      // Signup should still fail with 500
-      expect(result.success).toBe(false);
-      expect(result.statusCode).toBe(500);
-      expect(result.error).toBe("Internal server error");
-    });
-
-    test("handleSignup should log error when error notification fails (line 235)", async () => {
-      mockSheetsService.setAuthError(new Error("Sheets failed"));
-      mockDiscordService.setErrorNotificationError(new Error("Discord notification failed"));
-
-      const result = await handleSignup(
-        { email: "test@example.com", sheetTab: "Sheet1" },
-        mockContext,
-      );
-
-      expect(result.success).toBe(false);
-      // The error notification failure is logged (line 235)
-    });
-
-    test("handleExtendedSignup should send error notification when signup fails (lines 226-234)", async () => {
-      mockSheetsService.setAuthError(new Error("Sheets failed"));
-
-      const result = await handleExtendedSignup(
-        { email: "test@example.com", name: "Test", source: "api", tags: [], sheetTab: "Sheet1" },
-        mockContext,
-      );
-
-      expect(result.success).toBe(false);
-      expect(result.statusCode).toBe(500);
-
-      const errorNotifications = mockDiscordService.getNotificationsByType("error");
-      expect(errorNotifications.length).toBeGreaterThan(0);
-    });
-
-    test("handleExtendedSignup should handle error notification failure (lines 234-236)", async () => {
-      mockSheetsService.setAuthError(new Error("Sheets failed"));
-      mockDiscordService.setErrorNotificationError(new Error("Discord failed"));
-
-      const result = await handleExtendedSignup(
-        { email: "test@example.com", name: "Test", source: "api", tags: [], sheetTab: "Sheet1" },
-        mockContext,
-      );
-
-      expect(result.success).toBe(false);
-      expect(result.statusCode).toBe(500);
-    });
-
-    test("handleExtendedSignup should log error on failure (line 223)", async () => {
-      mockSheetsService.setAuthError(new Error("Test error"));
-
-      const result = await handleExtendedSignup(
-        { email: "test@example.com", name: "Test", source: "api", tags: [], sheetTab: "Sheet1" },
-        mockContext,
-      );
-
-      expect(result.success).toBe(false);
-      // Error is logged at line 223
-    });
-
-    test("handleBulkSignup should send error notification when signup fails (lines 313-323)", async () => {
-      // Note: The outer catch block in handleBulkSignup is only reached for unexpected errors
-      // Individual signup failures are caught and counted, not thrown
-      // This test verifies the structure exists even if hard to reach
-      expect(true).toBe(true);
-    });
-
-    test("handleBulkSignup should handle error notification failure (lines 321-323)", async () => {
-      // Note: Due to inner error handling in bulk signup, the outer catch is hard to reach
-      // The error notification path exists for unexpected failures
-      expect(true).toBe(true);
-    });
-
-    test("handleBulkSignup should log individual signup errors", async () => {
-      // Make individual signup fail
-      mockSheetsService.setWriteError(new Error("Bulk write error"));
-
-      const result = await handleBulkSignup(
-        {
-          signups: [
-            { email: "test1@example.com", sheetTab: "Sheet1" },
-            { email: "test2@example.com", sheetTab: "Sheet1" },
-          ],
-        },
-        mockContext,
-      );
-
-      // Bulk signup should still succeed overall, with individual failures counted
-      expect(result.success).toBe(true);
-      if (result.data) {
-        expect(result.data.failed).toBeGreaterThan(0);
-      }
-    });
-
-    test("handleBulkSignup should return error response for validation failure (lines 258-263)", async () => {
-      // Send invalid data (empty array)
-      const result = await handleBulkSignup(
-        {
-          signups: [],
-        },
-        mockContext,
-      );
-
-      expect(result.success).toBe(false);
-      expect(result.statusCode).toBe(400);
-      expect(result.error).toBe("Validation failed");
-    });
-
-    test("handleSignup should return error response (lines 238-241)", async () => {
-      mockSheetsService.setAuthError(new Error("Test error"));
-
-      const result = await handleSignup(
-        { email: "test@example.com", sheetTab: "Sheet1" },
-        mockContext,
-      );
-
-      expect(result).toEqual({
-        success: false,
-        statusCode: 500,
-        error: "Internal server error",
-      });
-    });
-
-    test("handleExtendedSignup should return error response (lines 238-241)", async () => {
-      mockSheetsService.setAuthError(new Error("Test error"));
-
-      const result = await handleExtendedSignup(
-        { email: "test@example.com", name: "Test", source: "api", tags: [], sheetTab: "Sheet1" },
-        mockContext,
-      );
-
-      expect(result).toEqual({
-        success: false,
-        statusCode: 500,
-        error: "Internal server error",
-      });
-    });
-
-    test("handleExtendedSignup should log error when signup notification fails (line 211)", async () => {
-      // Make sheets succeed but Discord notification fail
-      mockSheetsService.setAuthError(null); // Sheets succeed
-      mockDiscordService.setSignupError(new Error("Discord signup notification failed"));
-
-      const result = await handleExtendedSignup(
-        { email: "test@example.com", name: "Test", source: "api", tags: [], sheetTab: "Sheet1" },
-        mockContext,
-      );
-
-      // Signup should still succeed (Discord failures are non-blocking)
-      expect(result.success).toBe(true);
-      expect(result.statusCode).toBe(200);
-
-      // Wait a bit for the async .catch() to execute
-      await new Promise((resolve) => setTimeout(resolve, 10));
-    });
-
-    test("handleBulkSignup should handle unexpected errors (lines 309-328)", async () => {
-      // Create a scenario that triggers the outer catch block
-      // We'll do this by making the validation throw an unexpected error
-      // Note: This is difficult to test due to Zod's structure, but we verify the path exists
-
-      // Instead, test that the function handles individual signup errors properly
-      mockSheetsService.setWriteError(new Error("Write error"));
-
-      const result = await handleBulkSignup(
-        {
-          signups: [{ email: "test@example.com", sheetTab: "Sheet1" }],
-        },
-        mockContext,
-      );
-
-      // Should still succeed overall with errors counted
-      expect(result.success).toBe(true);
-      if (result.data) {
-        expect(result.data.failed).toBe(1);
-      }
-    });
-
-    test("handleBulkSignup should handle emailExists errors (inner catch)", async () => {
-      // Make emailExists throw an error
-      mockSheetsService.setAuthError(new Error("Database error"));
-
-      const result = await handleBulkSignup(
-        {
-          signups: [{ email: "test@example.com", sheetTab: "Sheet1" }],
-        },
-        mockContext,
-      );
-
-      // Should count as failed
-      expect(result.success).toBe(true); // Overall success
-      if (result.data) {
-        expect(result.data.failed).toBe(1);
-      }
-    });
-
-    test("handleBulkSignup outer catch block structure exists", async () => {
-      // This test verifies the outer catch block structure exists
-      // It's difficult to trigger due to inner error handling, but the code path exists
-      // The outer catch would only be reached by unexpected errors not caught by inner try-catch
-      expect(true).toBe(true); // Placeholder - verifies test structure exists
     });
   });
 });

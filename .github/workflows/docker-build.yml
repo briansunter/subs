@@ -6,9 +6,6 @@ on:
       - master
     tags:
       - "v*"
-  pull_request:
-    branches:
-      - master
   workflow_dispatch:
     inputs:
       tag:
@@ -23,6 +20,9 @@ permissions:
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
+    # Only run if CI workflow completed successfully
+    if: github.event_name != 'pull_request'
+    needs: ["CI"]
 
     steps:
       - name: Checkout code

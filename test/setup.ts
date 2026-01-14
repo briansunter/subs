@@ -7,9 +7,6 @@
  * local development and CI.
  */
 
-// Debug log to verify preload is working
-console.log("[test/setup.ts] Setting up test environment...");
-
 // Set test environment variables before any modules are imported
 process.env["NODE_ENV"] = "test";
 process.env["GOOGLE_SHEET_ID"] = "test-sheet-id";
@@ -26,9 +23,3 @@ process.env["CLOUDFLARE_TURNSTILE_SITE_KEY"] = "1x000000000000000000000000000000
 process.env["ENABLE_EXTENDED_SIGNUP"] = "true";
 process.env["ENABLE_BULK_SIGNUP"] = "true";
 process.env["ENABLE_METRICS"] = "true";
-
-console.log("[test/setup.ts] Feature flags set:", {
-  ENABLE_EXTENDED_SIGNUP: process.env["ENABLE_EXTENDED_SIGNUP"],
-  ENABLE_BULK_SIGNUP: process.env["ENABLE_BULK_SIGNUP"],
-  ENABLE_METRICS: process.env["ENABLE_METRICS"],
-});

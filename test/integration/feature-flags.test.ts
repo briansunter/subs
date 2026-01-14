@@ -3,7 +3,7 @@
  * Tests that feature flags properly enable/disable functionality
  */
 
-import { beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { clearConfigCache } from "../../src/config";
 import { getTestApp, setTestEnv } from "../helpers/test-app-elysia";
 import { mockSheetsService } from "../mocks/sheets";
@@ -16,6 +16,26 @@ describe("Feature Flags - Integration Tests", () => {
     mockTurnstileService.reset();
 
     // Clear config cache last to ensure clean state
+    clearConfigCache();
+  });
+
+  afterEach(async () => {
+    // Reset environment variables to default enabled state after each test
+    // This prevents polluting other tests that run in parallel
+    setTestEnv({
+      NODE_ENV: "test",
+      GOOGLE_SHEET_ID: "test-sheet-id",
+      GOOGLE_CREDENTIALS_EMAIL: "test@example.com",
+      GOOGLE_PRIVATE_KEY: "-----BEGIN PRIVATE KEY-----\ntest\n-----END PRIVATE KEY-----\n",
+      ALLOWED_ORIGINS: "*",
+      PORT: "3012",
+      HOST: "0.0.0.0",
+      CLOUDFLARE_TURNSTILE_SECRET_KEY: "1x0000000000000000000000000000000AA",
+      CLOUDFLARE_TURNSTILE_SITE_KEY: "1x0000000000000000000000000000000AA",
+      ENABLE_EXTENDED_SIGNUP: "true",
+      ENABLE_BULK_SIGNUP: "true",
+      ENABLE_METRICS: "true",
+    });
     clearConfigCache();
   });
 

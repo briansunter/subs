@@ -21,16 +21,15 @@ jobs:
         with:
           release-type: simple
           package-name: subs
-          command: manifest
 
       - name: Create Release
         if: ${{ steps.release.outputs.releases_created }}
-        uses: actions/create-release@v1
+        uses: softprops/action-gh-release@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tag_name: ${{ steps.release.outputs.tag_name }}
-          release_name: ${{ steps.release.outputs.tag_name }}
+          name: ${{ steps.release.outputs.tag_name }}
           body: ${{ steps.release.outputs.changelog }}
 
       - name: Trigger Docker Build

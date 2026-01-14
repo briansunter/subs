@@ -239,30 +239,7 @@ describe("Configuration - Unit Tests", () => {
     });
   });
 
-  describe("Proxy getter (config object)", () => {
-    test("should access config properties through proxy", () => {
-      process.env["GOOGLE_SHEET_ID"] = "test";
-      process.env["GOOGLE_CREDENTIALS_EMAIL"] = "test@example.com";
-      process.env["GOOGLE_PRIVATE_KEY"] = "test";
-
-      // Import and use the proxy getter
-      const { config: configProxy } = require("../../src/config");
-
-      expect(configProxy.googleSheetId).toBe("test");
-      expect(configProxy.port).toBe(3000);
-    });
-
-    test("should allow property access", () => {
-      process.env["GOOGLE_SHEET_ID"] = "sheet123";
-      process.env["GOOGLE_CREDENTIALS_EMAIL"] = "test@example.com";
-      process.env["GOOGLE_PRIVATE_KEY"] = "test";
-
-      const { config: configProxy } = require("../../src/config");
-
-      expect(configProxy.googleSheetId).toBe("sheet123");
-      expect(configProxy.googleCredentialsEmail).toBe("test@example.com");
-    });
-  });
+  // Note: Proxy getter tests removed - the Proxy export has been replaced with direct getConfig() calls
 
   describe("Edge Cases", () => {
     test("should handle PORT at extreme boundaries", () => {

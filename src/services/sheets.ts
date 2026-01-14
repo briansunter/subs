@@ -4,7 +4,7 @@
 
 import { JWT } from "google-auth-library";
 import { google } from "googleapis";
-import { config } from "../config";
+import type { SignupConfig } from "../config";
 import type { SheetRowData } from "../schemas/signup";
 import { createChildLogger } from "../utils/logger";
 
@@ -16,7 +16,7 @@ let sheetsClient: Awaited<ReturnType<typeof createSheetsClient>> | null = null;
 /**
  * Create and authenticate Google Sheets client
  */
-async function createSheetsClient() {
+async function createSheetsClient(config: SignupConfig) {
   const auth = new JWT({
     email: config.googleCredentialsEmail,
     key: config.googlePrivateKey,
@@ -38,9 +38,9 @@ async function createSheetsClient() {
 /**
  * Get or create cached sheets client
  */
-async function getSheetsClient() {
+async function getSheetsClient(config: SignupConfig) {
   if (!sheetsClient) {
-    sheetsClient = await createSheetsClient();
+    sheetsClient = await createSheetsClient(config);
   }
   return sheetsClient;
 }
@@ -48,9 +48,9 @@ async function getSheetsClient() {
 /**
  * Initialize a sheet tab with headers if it doesn't exist
  */
-export async function initializeSheetTab(sheetTab: string): Promise<void> {
+export async function initializeSheetTab(sheetTab: string, config: SignupConfig): Promise<void> {
   try {
-    const sheets = await getSheetsClient();
+    const sheets = await getSheetsClient(config);
 
     // Check if sheet exists
     const spreadsheet = await sheets.spreadsheets.get({
@@ -109,11 +109,12 @@ export async function initializeSheetTab(sheetTab: string): Promise<void> {
  */
 export async function appendSignup(
   data: SheetRowData & { sheetTab: string; tags?: string[] },
+  config: SignupConfig,
 ): Promise<void> {
   try {
-    await initializeSheetTab(data.sheetTab);
+    await initializeSheetTab(data.sheetTab, config);
 
-    const sheets = await getSheetsClient();
+    const sheets = await getSheetsClient(config);
     const range = `${data.sheetTab}!A:A`;
 
     await sheets.spreadsheets.values.append({
@@ -149,12 +150,12 @@ export async function appendSignup(
 /**
  * Check if email already exists in any sheet tab
  */
-export async function emailExists(email: string, sheetTab?: string): Promise<boolean> {
+export async function emailExists(email: string, sheetTab: string | undefined, config: SignupConfig): Promise<boolean> {
   try {
-    const sheets = await getSheetsClient();
+    const sheets = await getSheetsClient(config);
 
     // If sheetTab is specified, only check that tab
-    const tabsToCheck = sheetTab ? [sheetTab] : await getAllSheetTabs();
+    const tabsToCheck = sheetTab ? [sheetTab] : await getAllSheetTabs(config);
 
     for (const tab of tabsToCheck) {
       const result = await sheets.spreadsheets.values.get({
@@ -182,18 +183,21 @@ export async function emailExists(email: string, sheetTab?: string): Promise<boo
 /**
  * Get all sheet tabs in the spreadsheet
  */
-async function getAllSheetTabs(): Promise<string[]> {
+async function getAllSheetTabs(config: SignupConfig): Promise<string[]> {
   try {
-    const sheets = await getSheetsClient();
+    const sheets = await getSheetsClient(config);
     const spreadsheet = await sheets.spreadsheets.get({
       spreadsheetId: config.googleSheetId,
     });
 
-    return (
-      spreadsheet.data.sheets
-        ?.map((sheet) => sheet.properties?.title)
-        .filter((title): title is string => title !== undefined) || []
-    );
+    const titles: string[] = [];
+    for (const sheet of spreadsheet.data.sheets || []) {
+      const title = sheet.properties?.title;
+      if (title) {
+        titles.push(title);
+      }
+    }
+    return titles;
   } catch (error) {
     logger.error({ error }, "Failed to get sheet tabs");
     return [config.defaultSheetTab];
@@ -203,13 +207,13 @@ async function getAllSheetTabs(): Promise<string[]> {
 /**
  * Get signup statistics
  */
-export async function getSignupStats(sheetTab?: string): Promise<{
+export async function getSignupStats(sheetTab: string | undefined, config: SignupConfig): Promise<{
   totalSignups: number;
   sheetTabs: string[];
 }> {
   try {
-    const sheets = await getSheetsClient();
-    const tabs = sheetTab ? [sheetTab] : await getAllSheetTabs();
+    const sheets = await getSheetsClient(config);
+    const tabs = sheetTab ? [sheetTab] : await getAllSheetTabs(config);
 
     let totalSignups = 0;
 
@@ -226,7 +230,7 @@ export async function getSignupStats(sheetTab?: string): Promise<{
 
     return {
       totalSignups,
-      sheetTabs: await getAllSheetTabs(),
+      sheetTabs: await getAllSheetTabs(config),
     };
   } catch (error) {
     logger.error({ error }, "Failed to get signup stats");

@@ -67,7 +67,7 @@ mock.module("googleapis", () => {
 import { beforeEach, describe, expect, test } from "bun:test";
 
 // Import and clear config cache
-import { clearConfigCache } from "../../../src/config";
+import { clearConfigCache, type SignupConfig } from "../../../src/config";
 
 // Import the service functions
 import {
@@ -76,6 +76,17 @@ import {
   getSignupStats,
   initializeSheetTab,
 } from "../../../src/services/sheets";
+
+// Test configuration
+const testConfig: SignupConfig = {
+  port: 3000,
+  host: "0.0.0.0",
+  googleSheetId: "test-sheet-id",
+  googleCredentialsEmail: "test@example.com",
+  googlePrivateKey: "-----BEGIN PRIVATE KEY-----\ntest\n-----END PRIVATE KEY-----\n",
+  defaultSheetTab: "Sheet1",
+  allowedOrigins: ["*"],
+};
 
 describe("Sheets Service - Real Implementation Tests", () => {
   beforeEach(() => {
@@ -119,7 +130,7 @@ describe("Sheets Service - Real Implementation Tests", () => {
         },
       });
 
-      await initializeSheetTab("Sheet1");
+      await initializeSheetTab("Sheet1", testConfig);
 
       // Should check if sheet exists
       expect(mockSpreadsheetsGet).toHaveBeenCalled();
@@ -146,7 +157,7 @@ describe("Sheets Service - Real Implementation Tests", () => {
         },
       });
 
-      await initializeSheetTab("NewSheet");
+      await initializeSheetTab("NewSheet", testConfig);
 
       // Should create new sheet
       expect(mockSpreadsheetsBatchUpdate).toHaveBeenCalledWith({
@@ -189,7 +200,7 @@ describe("Sheets Service - Real Implementation Tests", () => {
         },
       });
 
-      await initializeSheetTab("Sheet1");
+      await initializeSheetTab("Sheet1", testConfig);
 
       expect(mockValuesUpdate).toHaveBeenCalled();
     });
@@ -197,7 +208,7 @@ describe("Sheets Service - Real Implementation Tests", () => {
     test("should handle API errors gracefully", async () => {
       mockSpreadsheetsGet.mockRejectedValue(new Error("API Error"));
 
-      await expect(initializeSheetTab("Sheet1")).rejects.toThrow("API Error");
+      await expect(initializeSheetTab("Sheet1", testConfig)).rejects.toThrow("API Error");
     });
   });
 
@@ -223,7 +234,7 @@ describe("Sheets Service - Real Implementation Tests", () => {
         name: "John Doe",
         tags: ["newsletter", "beta"],
         metadata: { source: "landing-page" },
-      });
+      }, testConfig);
 
       expect(mockValuesAppend).toHaveBeenCalledWith({
         spreadsheetId: "test-sheet-id",
@@ -263,7 +274,7 @@ describe("Sheets Service - Real Implementation Tests", () => {
         timestamp: "2024-01-01T00:00:00.000Z",
         sheetTab: "Sheet1",
         tags: [],
-      });
+      }, testConfig);
 
       const callArgs = mockValuesAppend.mock.calls[0];
       expect(callArgs).toBeDefined();
@@ -287,7 +298,7 @@ describe("Sheets Service - Real Implementation Tests", () => {
         timestamp: "2024-01-01T00:00:00.000Z",
         sheetTab: "Sheet1",
         tags: [],
-      });
+      }, testConfig);
 
       const callArgs = mockValuesAppend.mock.calls[0];
       expect(callArgs).toBeDefined();
@@ -311,7 +322,7 @@ describe("Sheets Service - Real Implementation Tests", () => {
         timestamp: "2024-01-01T00:00:00.000Z",
         sheetTab: "Sheet1",
         metadata: { key: "value" },
-      });
+      }, testConfig);
 
       const callArgs = mockValuesAppend.mock.calls[0];
       expect(callArgs).toBeDefined();
@@ -334,7 +345,7 @@ describe("Sheets Service - Real Implementation Tests", () => {
         email: "test@example.com",
         timestamp: "2024-01-01T00:00:00.000Z",
         sheetTab: "Sheet1",
-      });
+      }, testConfig);
 
       const callArgs = mockValuesAppend.mock.calls[0];
       expect(callArgs).toBeDefined();
@@ -381,7 +392,7 @@ describe("Sheets Service - Real Implementation Tests", () => {
         },
       });
 
-      const exists = await emailExists("test@example.com");
+      const exists = await emailExists("test@example.com", undefined, testConfig);
 
       expect(exists).toBe(true);
       expect(mockValuesGet).toHaveBeenCalledWith({
@@ -406,7 +417,7 @@ describe("Sheets Service - Real Implementation Tests", () => {
         },
       });
 
-      const exists = await emailExists("TEST@EXAMPLE.COM"); // uppercase search
+      const exists = await emailExists("TEST@EXAMPLE.COM", undefined, testConfig); // uppercase search
 
       expect(exists).toBe(true);
     });
@@ -424,7 +435,7 @@ describe("Sheets Service - Real Implementation Tests", () => {
         },
       });
 
-      const exists = await emailExists("test@example.com");
+      const exists = await emailExists("test@example.com", undefined, testConfig);
 
       expect(exists).toBe(false);
     });
@@ -450,7 +461,7 @@ describe("Sheets Service - Real Implementation Tests", () => {
         });
       });
 
-      const exists = await emailExists("test@example.com");
+      const exists = await emailExists("test@example.com", undefined, testConfig);
 
       expect(exists).toBe(true);
       // Should have 2 calls for checking values (1 for Sheet1, 1 for Sheet2)
@@ -470,7 +481,7 @@ describe("Sheets Service - Real Implementation Tests", () => {
         },
       });
 
-      const exists = await emailExists("test@example.com", "Sheet2");
+      const exists = await emailExists("test@example.com", "Sheet2", testConfig);
 
       expect(exists).toBe(true);
       // Should only call for Sheet2 (plus one call for getting sheet tabs)
@@ -480,7 +491,7 @@ describe("Sheets Service - Real Implementation Tests", () => {
     test("should return false on API errors gracefully", async () => {
       mockSpreadsheetsGet.mockRejectedValue(new Error("API Error"));
 
-      const exists = await emailExists("test@example.com");
+      const exists = await emailExists("test@example.com", undefined, testConfig);
 
       expect(exists).toBe(false); // Should return false, not throw
     });
@@ -515,7 +526,7 @@ describe("Sheets Service - Real Implementation Tests", () => {
         });
       });
 
-      const stats = await getSignupStats();
+      const stats = await getSignupStats(undefined, testConfig);
 
       // The code does: rowCount = (values.length || 0) - 1
       // So: (2 - 1) + (1 - 1) = 1 + 0 = 1
@@ -535,7 +546,7 @@ describe("Sheets Service - Real Implementation Tests", () => {
         data: { values: [["Email"], ["user1@example.com"], ["user2@example.com"]] },
       });
 
-      const stats = await getSignupStats("Sheet1");
+      const stats = await getSignupStats("Sheet1", testConfig);
 
       expect(stats.totalSignups).toBe(2); // 3 rows - 1 header = 2
       expect(stats.sheetTabs).toEqual(["Sheet1", "Sheet2"]);
@@ -552,7 +563,7 @@ describe("Sheets Service - Real Implementation Tests", () => {
         data: { values: null }, // Empty
       });
 
-      const stats = await getSignupStats("EmptySheet");
+      const stats = await getSignupStats("EmptySheet", testConfig);
 
       expect(stats.totalSignups).toBe(0);
     });
@@ -568,7 +579,7 @@ describe("Sheets Service - Real Implementation Tests", () => {
         data: { values: [["Email"]] }, // Only header
       });
 
-      const stats = await getSignupStats("Sheet1");
+      const stats = await getSignupStats("Sheet1", testConfig);
 
       expect(stats.totalSignups).toBe(0); // 1 row - 1 header = 0
     });

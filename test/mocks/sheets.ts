@@ -89,7 +89,7 @@ export const mockSheetsService = {
   },
 
   // Mock implementation
-  initializeSheetTab: async (sheetTab: string) => {
+  initializeSheetTab: async (sheetTab: string, _config: unknown) => {
     if (enableOperationLogging) {
       operationLog.push({
         operation: "initializeSheetTab",
@@ -112,7 +112,7 @@ export const mockSheetsService = {
     name?: string;
     tags?: string[];
     metadata?: string;
-  }) => {
+  }, _config: unknown) => {
     if (enableOperationLogging) {
       operationLog.push({
         operation: "appendSignup",
@@ -139,7 +139,7 @@ export const mockSheetsService = {
     });
   },
 
-  emailExists: async (email: string, sheetTab?: string) => {
+  emailExists: async (email: string, sheetTab: string | undefined, _config: unknown) => {
     if (enableOperationLogging) {
       operationLog.push({
         operation: "emailExists",
@@ -164,7 +164,7 @@ export const mockSheetsService = {
     return false;
   },
 
-  getSignupStats: async (sheetTab?: string) => {
+  getSignupStats: async (sheetTab: string | undefined, _config: unknown) => {
     if (enableOperationLogging) {
       operationLog.push({
         operation: "getSignupStats",

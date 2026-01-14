@@ -5,9 +5,11 @@
 
 import cors from "@fastify/cors";
 import Fastify from "fastify";
-import { config } from "./src/config";
+import { getConfig } from "./src/config";
 import { signupRoutes } from "./src/routes/signup";
 import { logger } from "./src/utils/logger";
+
+const config = getConfig();
 
 const fastify = Fastify({
   logger: false, // Use our own logger

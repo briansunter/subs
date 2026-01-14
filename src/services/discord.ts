@@ -129,11 +129,10 @@ export async function sendErrorNotification(
   };
 
   if (error.context) {
-    embed.fields = Object.entries(error.context).map(([key, value]) => ({
-      name: key,
-      value: String(value),
-      inline: true,
-    }));
+    embed.fields = [];
+    for (const [key, value] of Object.entries(error.context)) {
+      embed.fields.push({ name: key, value: String(value), inline: true });
+    }
   }
 
   await sendDiscordNotification(

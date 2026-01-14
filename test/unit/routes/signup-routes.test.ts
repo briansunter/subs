@@ -267,7 +267,7 @@ describe("Signup Routes - Unit Tests", () => {
         email: "existing@example.com",
         timestamp: new Date().toISOString(),
         sheetTab: "Sheet1",
-      });
+      }, {} as any);
 
       const response = await fastify.inject({
         method: "POST",
@@ -462,12 +462,12 @@ describe("Signup Routes - Unit Tests", () => {
         email: "user1@example.com",
         timestamp: new Date().toISOString(),
         sheetTab: "Sheet1",
-      });
+      }, {} as any);
       await mockSheetsService.appendSignup({
         email: "user2@example.com",
         timestamp: new Date().toISOString(),
         sheetTab: "Sheet1",
-      });
+      }, {} as any);
 
       const response = await fastify.inject({
         method: "POST",
@@ -505,7 +505,7 @@ describe("Signup Routes - Unit Tests", () => {
         email: "user1@example.com",
         timestamp: new Date().toISOString(),
         sheetTab: "Sheet1",
-      });
+      }, {} as any);
 
       const response = await fastify.inject({
         method: "POST",

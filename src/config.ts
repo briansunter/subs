@@ -103,10 +103,3 @@ export function getConfig(): SignupConfig {
 export function clearConfigCache(): void {
   cachedConfig = undefined;
 }
-
-// For backwards compatibility, export a getter that accesses the cache
-export const config: SignupConfig = new Proxy({} as never, {
-  get(_target, prop) {
-    return getConfig()[prop as keyof SignupConfig];
-  },
-});

@@ -127,7 +127,10 @@ export async function handleSignup(data: SignupInput, ctx: SignupContext): Promi
     // Validate input with Zod
     const validationResult = signupSchema.safeParse(data);
     if (!validationResult.success) {
-      const errors = validationResult.error.issues.map((e) => `${e.path.join(".")}: ${e.message}`);
+      const errors: string[] = [];
+      for (const e of validationResult.error.issues) {
+        errors.push(`${e.path.join(".")}: ${e.message}`);
+      }
       return {
         success: false,
         statusCode: 400,
@@ -149,6 +152,7 @@ export async function handleSignup(data: SignupInput, ctx: SignupContext): Promi
       exists = await ctx.sheets.emailExists(
         validationResult.data.email,
         validationResult.data.sheetTab,
+        ctx.config,
       );
       recordSheetsRequest("emailExists", true, (Date.now() - sheetsStartTime) / 1000);
     } catch (error) {
@@ -174,7 +178,7 @@ export async function handleSignup(data: SignupInput, ctx: SignupContext): Promi
         metadata: validationResult.data.metadata
           ? JSON.stringify(validationResult.data.metadata)
           : undefined,
-      });
+      }, ctx.config);
       recordSheetsRequest("appendSignup", true, (Date.now() - appendStartTime) / 1000);
     } catch (error) {
       recordSheetsRequest("appendSignup", false, (Date.now() - appendStartTime) / 1000);
@@ -182,7 +186,7 @@ export async function handleSignup(data: SignupInput, ctx: SignupContext): Promi
     }
 
     // Send Discord notification (non-blocking, errors ignored)
-    ctx.discord
+    void ctx.discord
       .sendSignupNotification(
         {
           email: validationResult.data.email,
@@ -216,7 +220,7 @@ export async function handleSignup(data: SignupInput, ctx: SignupContext): Promi
     recordSignup("/api/signup", false, duration);
 
     // Send error notification to Discord (non-blocking)
-    ctx.discord
+    void ctx.discord
       .sendErrorNotification(
         {
           message: "Signup processing failed",
@@ -254,7 +258,10 @@ export async function handleExtendedSignup(
     // Validate input with Zod
     const validationResult = extendedSignupSchema.safeParse(data);
     if (!validationResult.success) {
-      const errors = validationResult.error.issues.map((e) => `${e.path.join(".")}: ${e.message}`);
+      const errors: string[] = [];
+      for (const e of validationResult.error.issues) {
+        errors.push(`${e.path.join(".")}: ${e.message}`);
+      }
       return {
         success: false,
         statusCode: 400,
@@ -276,6 +283,7 @@ export async function handleExtendedSignup(
       exists = await ctx.sheets.emailExists(
         validationResult.data.email,
         validationResult.data.sheetTab,
+        ctx.config,
       );
       recordSheetsRequest("emailExists", true, (Date.now() - sheetsStartTime) / 1000);
     } catch (error) {
@@ -303,11 +311,11 @@ export async function handleExtendedSignup(
       metadata: validationResult.data.metadata
         ? JSON.stringify(validationResult.data.metadata)
         : undefined,
-    });
+    }, ctx.config);
     recordSheetsRequest("appendSignup", true, (Date.now() - appendStartTime) / 1000);
 
     // Send Discord notification (non-blocking)
-    ctx.discord
+    void ctx.discord
       .sendSignupNotification(
         {
           email: validationResult.data.email,
@@ -344,7 +352,7 @@ export async function handleExtendedSignup(
     recordSignup("/api/signup/extended", false, duration);
 
     // Send error notification to Discord (non-blocking)
-    ctx.discord
+    void ctx.discord
       .sendErrorNotification(
         {
           message: "Extended signup processing failed",
@@ -381,7 +389,10 @@ export async function handleBulkSignup(
     // Validate input with Zod
     const validationResult = bulkSignupSchema.safeParse(data);
     if (!validationResult.success) {
-      const errors = validationResult.error.issues.map((e) => `${e.path.join(".")}: ${e.message}`);
+      const errors: string[] = [];
+      for (const e of validationResult.error.issues) {
+        errors.push(`${e.path.join(".")}: ${e.message}`);
+      }
       return {
         success: false,
         statusCode: 400,
@@ -401,7 +412,7 @@ export async function handleBulkSignup(
       try {
         // Check if email already exists
         const sheetsStartTime = Date.now();
-        const exists = await ctx.sheets.emailExists(signup.email, signup.sheetTab);
+        const exists = await ctx.sheets.emailExists(signup.email, signup.sheetTab, ctx.config);
         recordSheetsRequest("emailExists", true, (Date.now() - sheetsStartTime) / 1000);
 
         if (exists) {
@@ -416,7 +427,7 @@ export async function handleBulkSignup(
           timestamp: new Date().toISOString(),
           sheetTab: signup.sheetTab || ctx.config.defaultSheetTab,
           metadata: signup.metadata ? JSON.stringify(signup.metadata) : undefined,
-        });
+        }, ctx.config);
         recordSheetsRequest("appendSignup", true, (Date.now() - appendStartTime) / 1000);
 
         results.success++;
@@ -447,7 +458,7 @@ export async function handleBulkSignup(
     recordSignup("/api/signup/bulk", false, duration);
 
     // Send error notification to Discord (non-blocking)
-    ctx.discord
+    void ctx.discord
       .sendErrorNotification(
         {
           message: "Bulk signup processing failed",
@@ -482,7 +493,7 @@ export async function handleGetStats(
 
   try {
     const sheetsStartTime = Date.now();
-    const stats = await ctx.sheets.getSignupStats(sheetTab);
+    const stats = await ctx.sheets.getSignupStats(sheetTab, ctx.config);
     recordSheetsRequest("getSignupStats", true, (Date.now() - sheetsStartTime) / 1000);
 
     return {

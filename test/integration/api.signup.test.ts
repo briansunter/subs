@@ -52,7 +52,7 @@ describe("Signup API Integration Tests", () => {
         email: "user1@example.com",
         timestamp: new Date().toISOString(),
         sheetTab: "Sheet1",
-      });
+      }, {} as any);
 
       const response = await app.inject({
         method: "GET",

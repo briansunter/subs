@@ -5,7 +5,7 @@
 
 import cors from "@fastify/cors";
 import Fastify from "fastify";
-import { clearConfigCache as _clearConfigCache, config } from "../../src/config";
+import { clearConfigCache as _clearConfigCache, getConfig } from "../../src/config";
 import type { SignupContext } from "../../src/routes/handlers";
 import { signupRoutes } from "../../src/routes/signup";
 
@@ -38,6 +38,8 @@ export async function getTestApp() {
   const fastify = Fastify({
     logger: false,
   });
+
+  const config = getConfig();
 
   // Register CORS plugin
   await fastify.register(cors, {

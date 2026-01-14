@@ -62,13 +62,15 @@ export async function signupRoutes(fastify: FastifyInstance, options: SignupRout
 
     // Handle Zod validation errors from fastify-type-provider-zod
     if (error.validation && error.validation.length > 0) {
+      const details: string[] = [];
+      for (const e of error.validation) {
+        details.push(`${e.params?.field || "field"}: ${e.message || "invalid"}`);
+      }
       reply.code(400).send({
         success: false,
         statusCode: 400,
         error: "Validation failed",
-        details: error.validation.map(
-          (e) => `${e.params?.field || "field"}: ${e.message || "invalid"}`,
-        ),
+        details,
       });
       return;
     }

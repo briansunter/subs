@@ -38,7 +38,7 @@ export const signupSchema = z.object({
 export const extendedSignupSchema = signupSchema.extend({
   name: z.string().min(1, "Name is required").optional(),
   source: z.string().optional().default("api"),
-  tags: z.array(z.string()).optional().default([]),
+  tags: z.array(z.string()).max(50, "Cannot have more than 50 tags").optional().default([]),
 });
 
 /**

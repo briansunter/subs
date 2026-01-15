@@ -302,6 +302,9 @@ export async function appendSignup(
 
     const range = `${data.sheetTab}!A:A`;
 
+    // Normalize email to lowercase for consistent storage
+    const normalizedEmail = data.email.toLowerCase();
+
     await sheetsRequest(
       `/spreadsheets/${config.googleSheetId}/values/${encodeURIComponent(range)}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
       ValueRangeSchema,
@@ -314,7 +317,7 @@ export async function appendSignup(
         body: JSON.stringify({
           values: [
             [
-              data.email,
+              normalizedEmail,
               data.timestamp,
               data.source || "api",
               data.name || "",
@@ -328,7 +331,7 @@ export async function appendSignup(
     );
 
     logger.info(
-      { email: data.email, sheetTab: data.sheetTab },
+      { email: normalizedEmail, sheetTab: data.sheetTab },
       "Successfully appended signup to sheet",
     );
   } catch (error) {

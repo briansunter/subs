@@ -10,28 +10,7 @@
 
 import type { Elysia } from "elysia";
 import { logger } from "../utils/logger";
-
-/**
- * Request-scoped state using WeakMap
- * This is the recommended Elysia pattern for request lifecycle data
- *
- * @see {@link https://github.com/elysiajs/elysia/issues/1476 | Request-scoped state discussion}
- */
-const requestStartTimes = new WeakMap<Request, number>();
-
-/**
- * Helper to get request start time
- */
-function getRequestStartTime(request: Request): number {
-  return requestStartTimes.get(request) ?? Date.now();
-}
-
-/**
- * Helper to set request start time
- */
-function setRequestStartTime(request: Request, startTime: number): void {
-  requestStartTimes.set(request, startTime);
-}
+import { getRequestStartTime, setRequestStartTime } from "../utils/request-state";
 
 /**
  * Plugin that adds structured logging for requests and responses

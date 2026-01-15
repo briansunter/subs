@@ -12,12 +12,18 @@ const envSchema = z.object({
   PORT: z
     .string()
     .default("3000")
-    .transform((val) => parseInt(val, 10)),
+    .transform((val) => parseInt(val, 10))
+    .refine((val) => !Number.isNaN(val) && val > 0 && val < 65536, {
+      message: "PORT must be a valid number between 1 and 65535",
+    }),
   HOST: z.string().default("0.0.0.0"),
 
   // Google Sheets
   GOOGLE_SHEET_ID: z.string().min(1, "GOOGLE_SHEET_ID is required"),
-  GOOGLE_CREDENTIALS_EMAIL: z.string().min(1, "GOOGLE_CREDENTIALS_EMAIL is required"),
+  GOOGLE_CREDENTIALS_EMAIL: z
+    .string()
+    .min(1, "GOOGLE_CREDENTIALS_EMAIL is required")
+    .email("GOOGLE_CREDENTIALS_EMAIL must be a valid email address"),
   GOOGLE_PRIVATE_KEY: z.string().min(1, "GOOGLE_PRIVATE_KEY is required"),
   DEFAULT_SHEET_TAB: z.string().default("Sheet1"),
 
@@ -29,7 +35,12 @@ const envSchema = z.object({
   ALLOWED_ORIGINS: z
     .string()
     .default("*")
-    .transform((val) => val.split(",").map((origin) => origin.trim())),
+    .transform((val) =>
+      val
+        .split(",")
+        .map((origin) => origin.trim())
+        .filter(Boolean),
+    ),
 
   // Node environment
   NODE_ENV: z.string().default("development"),

@@ -9,27 +9,30 @@
 
 import type { Elysia } from "elysia";
 import { recordHttpRequest } from "../services/metrics";
+import {
+  getRequestFlag,
+  getRequestStartTime,
+  setRequestFlag,
+  setRequestStartTime,
+} from "../utils/request-state";
 
 /**
- * Request-scoped state using WeakMap
- * This is the recommended Elysia pattern for request lifecycle data
- *
- * @see {@link https://github.com/elysiajs/elysia/issues/1476 | Request-scoped state discussion}
+ * Flag name for tracking if metrics have been recorded
  */
-const requestStartTimes = new WeakMap<Request, number>();
+const METRICS_RECORDED_FLAG = "__metricsRecorded";
 
 /**
- * Helper to get request start time
+ * Check if metrics were already recorded for this request
  */
-function getRequestStartTime(request: Request): number {
-  return requestStartTimes.get(request) ?? Date.now();
+function hasRecordedMetrics(request: Request): boolean {
+  return getRequestFlag(request, METRICS_RECORDED_FLAG);
 }
 
 /**
- * Helper to set request start time
+ * Mark metrics as recorded for this request
  */
-function setRequestStartTime(request: Request, startTime: number): void {
-  requestStartTimes.set(request, startTime);
+function markMetricsRecorded(request: Request): void {
+  setRequestFlag(request, METRICS_RECORDED_FLAG, true);
 }
 
 /**
@@ -53,14 +56,27 @@ export const metricsPlugin = (app: Elysia) =>
   app
     .onRequest(({ request }) => {
       setRequestStartTime(request, Date.now());
+      // Initialize metrics recorded flag
+      setRequestFlag(request, METRICS_RECORDED_FLAG, false);
     })
     .onAfterHandle(({ request, set }) => {
+      // Skip if already recorded (e.g., in onError)
+      if (hasRecordedMetrics(request)) {
+        return;
+      }
+
       const duration = (Date.now() - getRequestStartTime(request)) / 1000;
       const url = new URL(request.url);
       const route = url.pathname || "unknown";
       recordHttpRequest(request.method, route, Number(set.status), duration);
+      markMetricsRecorded(request);
     })
     .onError(({ code, set, request }) => {
+      // Skip if already recorded in onAfterHandle
+      if (hasRecordedMetrics(request)) {
+        return;
+      }
+
       const url = new URL(request.url);
       const route = url.pathname || "unknown";
       const duration = (Date.now() - getRequestStartTime(request)) / 1000;
@@ -77,4 +93,5 @@ export const metricsPlugin = (app: Elysia) =>
           duration,
         );
       }
+      markMetricsRecorded(request);
     });

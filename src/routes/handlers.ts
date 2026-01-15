@@ -262,19 +262,24 @@ export async function handleExtendedSignup(
 
     // Store in Google Sheets
     const appendStartTime = Date.now();
-    await ctx.sheets.appendSignup(
-      {
-        email,
-        timestamp: new Date().toISOString(),
-        sheetTab: sheetTab || ctx.config.defaultSheetTab,
-        name,
-        source,
-        tags,
-        metadata: metadata ? JSON.stringify(metadata) : undefined,
-      },
-      ctx.config,
-    );
-    recordSheetsRequest("appendSignup", true, (Date.now() - appendStartTime) / 1000);
+    try {
+      await ctx.sheets.appendSignup(
+        {
+          email,
+          timestamp: new Date().toISOString(),
+          sheetTab: sheetTab || ctx.config.defaultSheetTab,
+          name,
+          source,
+          tags,
+          metadata: metadata ? JSON.stringify(metadata) : undefined,
+        },
+        ctx.config,
+      );
+      recordSheetsRequest("appendSignup", true, (Date.now() - appendStartTime) / 1000);
+    } catch (error) {
+      recordSheetsRequest("appendSignup", false, (Date.now() - appendStartTime) / 1000);
+      throw error; // Re-throw to be caught by outer handler
+    }
 
     logger.info({ email }, "Extended signup processed");
 
@@ -363,12 +368,14 @@ export async function handleBulkSignup(
     }
 
     logger.info(
-      { total: results.success + results.failed, success: results.success },
+      { total: results.success + results.failed, success: results.success, failed: results.failed },
       "Bulk signup processed",
     );
 
     const duration = (Date.now() - startTime) / 1000;
-    recordSignup("/api/signup/bulk", true, duration);
+    // Only record success if there were no failures
+    const wasSuccessful = results.failed === 0;
+    recordSignup("/api/signup/bulk", wasSuccessful, duration);
 
     return {
       success: true,

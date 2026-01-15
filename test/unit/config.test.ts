@@ -65,16 +65,14 @@ describe("Configuration - Unit Tests", () => {
       expect(config.port).toBe(8080);
     });
 
-    test("should handle invalid PORT format (results in NaN)", () => {
+    test("should throw error for invalid PORT format (NaN)", () => {
       process.env["GOOGLE_SHEET_ID"] = "test";
       process.env["GOOGLE_CREDENTIALS_EMAIL"] = "test@example.com";
       process.env["GOOGLE_PRIVATE_KEY"] = "test";
       process.env["PORT"] = "invalid";
 
-      const config = getConfig();
-
-      // Zod's parseInt returns NaN for invalid strings, which is still a number
-      expect(config.port).toBeNaN();
+      // Should throw ZodError because NaN doesn't pass the refine validation
+      expect(() => getConfig()).toThrow("PORT must be a valid number between 1 and 65535");
     });
 
     test("should replace \\n in private key with actual newlines", () => {
@@ -261,20 +259,19 @@ describe("Configuration - Unit Tests", () => {
 
       const config = getConfig();
 
-      // The transform splits by comma and trims, but doesn't filter empty strings
-      expect(config.allowedOrigins).toEqual(["https://example.com", ""]);
+      // The transform splits by comma, trims, and filters empty strings
+      expect(config.allowedOrigins).toEqual(["https://example.com"]);
     });
   });
 
   describe("Zod Schema Validation", () => {
-    test("should accept any non-empty string for GOOGLE_CREDENTIALS_EMAIL", () => {
+    test("should validate email format for GOOGLE_CREDENTIALS_EMAIL", () => {
       process.env["GOOGLE_SHEET_ID"] = "test";
       process.env["GOOGLE_CREDENTIALS_EMAIL"] = "not-an-email";
       process.env["GOOGLE_PRIVATE_KEY"] = "test";
 
-      // The config doesn't validate email format, only that it's non-empty
-      const config = getConfig();
-      expect(config.googleCredentialsEmail).toBe("not-an-email");
+      // Should throw error for invalid email format
+      expect(() => getConfig()).toThrow("GOOGLE_CREDENTIALS_EMAIL must be a valid email address");
     });
 
     test("should require non-empty GOOGLE_CREDENTIALS_EMAIL", () => {

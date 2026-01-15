@@ -103,7 +103,9 @@ export const createApp = (elysiaOptions?: Partial<ElysiaConfig<"">>) => {
       .use(
         cors({
           origin: config.allowedOrigins,
-          credentials: true,
+          // Only enable credentials if not using wildcard origin
+          // Browsers block credentials with wildcard origins
+          credentials: config.allowedOrigins.length === 1 && config.allowedOrigins[0] !== "*",
           methods: ["GET", "POST", "OPTIONS"],
           allowedHeaders: ["Content-Type", "Authorization"],
           maxAge: 86400, // 24 hours

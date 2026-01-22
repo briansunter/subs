@@ -3,11 +3,32 @@
  * Served at the root path for iframe embedding
  */
 
-import { getConfig } from "../config";
+import type { SignupConfig } from "../config";
 
-const config = getConfig();
+/**
+ * Escape HTML entities to prevent XSS
+ */
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
 
-export const HTML_FORM_CONTENT = `<!DOCTYPE html>
+/**
+ * Generate HTML form content with dynamic sheet tabs
+ */
+export function getHtmlFormContent(config: SignupConfig): string {
+  const sheetTabOptions = config.sheetTabs
+    .map(
+      (tab, i) =>
+        `<option value="${escapeHtml(tab)}"${i === 0 ? " selected" : ""}>${escapeHtml(tab)}</option>`,
+    )
+    .join("\n          ");
+
+  return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -169,14 +190,13 @@ export const HTML_FORM_CONTENT = `<!DOCTYPE html>
       <div class="form-group">
         <label for="sheetTab">List</label>
         <select id="sheetTab" name="sheetTab">
-          <option value="Sheet1">General</option>
-          <option value="Beta">Beta Users</option>
-          <option value="Enterprise">Enterprise</option>
+          ${sheetTabOptions}
         </select>
       </div>
 
       <button type="submit" id="submitBtn">
         <span id="btnText">Sign Up</span>
+        <span id="btnLoading" class="loading hidden"></span>
       </button>
 
       <div id="message" class="message"></div>
@@ -187,12 +207,14 @@ export const HTML_FORM_CONTENT = `<!DOCTYPE html>
     const form = document.getElementById('signupForm');
     const submitBtn = document.getElementById('submitBtn');
     const btnText = document.getElementById('btnText');
+    const btnLoading = document.getElementById('btnLoading');
     const messageEl = document.getElementById('message');
 
     // Get configuration from URL params
     const urlParams = new URLSearchParams(window.location.search);
     const apiEndpoint = urlParams.get('api') || '/api/signup/extended';
     const redirectUrl = urlParams.get('redirect');
+    const site = urlParams.get('site');
 
     // Validated parent origin for postMessage (set when receiving messages)
     let validatedParentOrigin = null;
@@ -213,6 +235,20 @@ export const HTML_FORM_CONTENT = `<!DOCTYPE html>
       }
     }
 
+    function showLoading() {
+      submitBtn.disabled = true;
+      btnText.textContent = 'Signing up...';
+      btnLoading.classList.remove('hidden');
+      messageEl.className = 'message';
+      messageEl.textContent = '';
+    }
+
+    function hideLoading() {
+      submitBtn.disabled = false;
+      btnText.textContent = 'Sign Up';
+      btnLoading.classList.add('hidden');
+    }
+
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
 
@@ -220,32 +256,35 @@ export const HTML_FORM_CONTENT = `<!DOCTYPE html>
       const name = document.getElementById('name').value;
       const sheetTab = document.getElementById('sheetTab').value;
 
-      // Show loading state
-      submitBtn.disabled = true;
-      btnText.innerHTML = '<span class="loading"></span>Signing up...';
-      messageEl.className = 'message';
-      messageEl.textContent = '';
+      showLoading();
 
       try {
+        const body = {
+          email,
+          name: name || undefined,
+          sheetTab,
+          source: 'embed',
+          tags: ['web-form']
+        };
+
+        // Add site if provided
+        if (site) {
+          body.site = site;
+        }
+
         const response = await fetch(apiEndpoint, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({
-            email,
-            name: name || undefined,
-            sheetTab,
-            source: 'embed',
-            tags: ['web-form']
-          })
+          body: JSON.stringify(body)
         });
 
         const data = await response.json();
 
         if (response.ok && data.success) {
           messageEl.textContent = data.message || 'Successfully signed up!';
-          messageEl.classList.add('success', 'show');
+          messageEl.className = 'message success show';
           form.reset();
 
           // Redirect if redirect URL is provided and validated
@@ -256,14 +295,13 @@ export const HTML_FORM_CONTENT = `<!DOCTYPE html>
           }
         } else {
           messageEl.textContent = data.error || 'An error occurred. Please try again.';
-          messageEl.classList.add('error', 'show');
+          messageEl.className = 'message error show';
         }
       } catch (error) {
         messageEl.textContent = 'Network error. Please try again.';
-        messageEl.classList.add('error', 'show');
+        messageEl.className = 'message error show';
       } finally {
-        submitBtn.disabled = false;
-        btnText.textContent = 'Sign Up';
+        hideLoading();
       }
     });
 
@@ -299,3 +337,9 @@ export const HTML_FORM_CONTENT = `<!DOCTYPE html>
 </body>
 </html>
 `;
+}
+
+// Backwards compatibility: export a default constant using default config
+// Note: This will use the config at module load time
+import { getConfig } from "../config";
+export const HTML_FORM_CONTENT = getHtmlFormContent(getConfig());

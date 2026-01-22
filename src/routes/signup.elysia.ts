@@ -53,6 +53,18 @@ function createFeatureGuard(isEnabled: boolean): undefined | GuardFunction[] {
 }
 
 /**
+ * Parse form-urlencoded body
+ */
+function parseFormBody(body: string): Record<string, string> {
+  const params = new URLSearchParams(body);
+  const result: Record<string, string> = {};
+  for (const [key, value] of params.entries()) {
+    result[key] = value;
+  }
+  return result;
+}
+
+/**
  * Create Elysia app with all signup routes
  * @param context - Optional context for dependency injection (for testing)
  * @param elysiaOptions - Optional Elysia configuration options (e.g., { adapter: CloudflareAdapter })
@@ -92,6 +104,7 @@ export const createSignupRoutes = (
             turnstileSiteKey: config.turnstileSiteKey ?? null,
             turnstileEnabled: !!config.turnstileSiteKey,
             defaultSheetTab: config.defaultSheetTab,
+            sheetTabs: config.sheetTabs,
           }))
           // Metrics endpoint (conditional on feature flag)
           .get(
@@ -114,7 +127,7 @@ export const createSignupRoutes = (
               body: signupSchema,
             },
           )
-          // Extended signup (conditional on feature flag)
+          // Extended signup
           .post(
             "/signup/extended",
             async ({ body, context, set }) => {
@@ -124,10 +137,9 @@ export const createSignupRoutes = (
             },
             {
               body: extendedSignupSchema,
-              beforeHandle: createFeatureGuard(config.enableExtendedSignup),
             },
           )
-          // Bulk signup (conditional on feature flag)
+          // Bulk signup
           .post(
             "/signup/bulk",
             async ({ body, context, set }) => {
@@ -137,9 +149,50 @@ export const createSignupRoutes = (
             },
             {
               body: bulkSignupSchema,
-              beforeHandle: createFeatureGuard(config.enableBulkSignup),
             },
-          ),
+          )
+          // Form POST endpoint (for HTML form submissions)
+          .post("/signup/form", async ({ request, context, set }) => {
+            const contentType = request.headers.get("content-type") || "";
+
+            let parsedForm: Record<string, string>;
+
+            if (contentType.includes("application/x-www-form-urlencoded")) {
+              const text = await request.text();
+              parsedForm = parseFormBody(text);
+            } else if (contentType.includes("multipart/form-data")) {
+              const data = await request.formData();
+              parsedForm = {};
+              for (const [key, value] of data.entries()) {
+                if (typeof value === "string") {
+                  parsedForm[key] = value;
+                }
+              }
+            } else {
+              set.status = 415;
+              return {
+                success: false,
+                statusCode: 415,
+                error: "Unsupported Media Type",
+                details: ["Expected application/x-www-form-urlencoded or multipart/form-data"],
+              };
+            }
+
+            // Convert form data to signup input
+            const tagsValue = parsedForm["tags"];
+            const signupData = {
+              email: parsedForm["email"] || "",
+              name: parsedForm["name"],
+              sheetTab: parsedForm["sheetTab"] || config.defaultSheetTab,
+              site: parsedForm["site"],
+              source: parsedForm["source"] || "form",
+              tags: tagsValue ? tagsValue.split(",").map((t) => t.trim()) : ["form-submit"],
+            };
+
+            const result = await handleExtendedSignup(signupData, context);
+            if (result.statusCode) set.status = result.statusCode;
+            return result;
+          }),
       )
   );
 };

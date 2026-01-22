@@ -70,13 +70,9 @@ describe("Route Handlers - Unit Tests", () => {
         googleCredentialsEmail: "test@example.com",
         googlePrivateKey: "-----BEGIN PRIVATE KEY-----\ntest\n-----END PRIVATE KEY-----\n",
         allowedOrigins: ["*"],
-        enableExtendedSignup: true,
-        enableBulkSignup: true,
         enableMetrics: true,
-        enableHsts: true,
-        enableRateLimiting: false,
-        rateLimitWindowMs: 60000,
-        rateLimitMaxRequests: 100,
+        allowedSheets: new Map(),
+        sheetTabs: ["Sheet1"],
       },
     };
   });

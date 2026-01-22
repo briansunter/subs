@@ -2,7 +2,7 @@
  * Prometheus metrics service
  */
 
-import { Counter, collectDefaultMetrics, Gauge, Histogram, Registry } from "prom-client";
+import { Counter, collectDefaultMetrics, Histogram, Registry } from "prom-client";
 
 // Create a Registry for our metrics
 export const register = new Registry();
@@ -81,13 +81,6 @@ export const turnstileValidationDurationSeconds = new Histogram({
   registers: [register],
 });
 
-// Active signups gauge (current count)
-export const activeSignups = new Gauge({
-  name: "active_signups",
-  help: "Number of active signups (tracked in session)",
-  registers: [register],
-});
-
 /**
  * Record HTTP request metrics
  */
@@ -123,18 +116,4 @@ export function recordSheetsRequest(operation: string, success: boolean, duratio
 export function recordTurnstileVerification(success: boolean, duration: number): void {
   turnstileRequestsTotal.inc({ status: success ? "success" : "error" });
   turnstileValidationDurationSeconds.observe(duration);
-}
-
-/**
- * Increment active signups counter
- */
-export function incrementActiveSignups(): void {
-  activeSignups.inc();
-}
-
-/**
- * Decrement active signups counter
- */
-export function decrementActiveSignups(): void {
-  activeSignups.dec();
 }

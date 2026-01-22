@@ -55,9 +55,9 @@ const testConfig: SignupConfig = {
   googlePrivateKey: "-----BEGIN PRIVATE KEY-----\ntest\n-----END PRIVATE KEY-----\n",
   defaultSheetTab: "Sheet1",
   allowedOrigins: ["*"],
-  enableExtendedSignup: true,
-  enableBulkSignup: true,
   enableMetrics: true,
+  allowedSheets: new Map(),
+  sheetTabs: ["Sheet1"],
 };
 
 // Track fetch calls
@@ -262,7 +262,7 @@ describe("Sheets Service - REST API Tests", () => {
       expect(batchUpdateCalls.length).toBeGreaterThan(0);
 
       const batchUpdateBody = getRequestBody(batchUpdateCalls[0]?.options);
-      expect(batchUpdateBody.requests).toEqual([
+      expect(batchUpdateBody["requests"]).toEqual([
         {
           addSheet: {
             properties: {
@@ -279,7 +279,7 @@ describe("Sheets Service - REST API Tests", () => {
       expect(updateCalls.length).toBeGreaterThan(0);
 
       const updateBody = getRequestBody(updateCalls[0]?.options);
-      expect(updateBody.values).toEqual([
+      expect(updateBody["values"]).toEqual([
         ["Email", "Timestamp", "Source", "Name", "Tags", "Metadata", "Sheet Tab"],
       ]);
     });
@@ -389,10 +389,11 @@ describe("Sheets Service - REST API Tests", () => {
           email: "test@example.com",
           timestamp: "2024-01-01T00:00:00.000Z",
           sheetTab: "Sheet1",
+          sheetId: "test-sheet-id",
           source: "website",
           name: "John Doe",
           tags: ["newsletter", "beta"],
-          metadata: { source: "landing-page" },
+          metadata: '{"source":"landing-page"}',
         },
         testConfig,
       );
@@ -401,7 +402,7 @@ describe("Sheets Service - REST API Tests", () => {
       expect(appendCalls.length).toBeGreaterThan(0);
 
       const appendBody = getRequestBody(appendCalls[0]?.options);
-      expect(appendBody.values).toEqual([
+      expect(appendBody["values"]).toEqual([
         [
           "test@example.com",
           "2024-01-01T00:00:00.000Z",
@@ -462,6 +463,7 @@ describe("Sheets Service - REST API Tests", () => {
           email: "test@example.com",
           timestamp: "2024-01-01T00:00:00.000Z",
           sheetTab: "Sheet1",
+          sheetId: "test-sheet-id",
           tags: [],
         },
         testConfig,
@@ -469,7 +471,8 @@ describe("Sheets Service - REST API Tests", () => {
 
       const appendCalls = fetchCalls.filter((c) => c.url.includes(":append"));
       const appendBody = getRequestBody(appendCalls[0]?.options);
-      expect(appendBody.values[0][2]).toBe("api"); // Default source
+      const values = appendBody["values"] as string[][];
+      expect(values[0][2]).toBe("api"); // Default source
     });
 
     test("should handle empty tags array", async () => {
@@ -520,6 +523,7 @@ describe("Sheets Service - REST API Tests", () => {
           email: "test@example.com",
           timestamp: "2024-01-01T00:00:00.000Z",
           sheetTab: "Sheet1",
+          sheetId: "test-sheet-id",
           tags: [],
         },
         testConfig,
@@ -527,7 +531,8 @@ describe("Sheets Service - REST API Tests", () => {
 
       const appendCalls = fetchCalls.filter((c) => c.url.includes(":append"));
       const appendBody = getRequestBody(appendCalls[0]?.options);
-      expect(appendBody.values[0][4]).toBe(""); // Empty tags
+      const values = appendBody["values"] as string[][];
+      expect(values[0][4]).toBe(""); // Empty tags
     });
 
     test("should stringify metadata object", async () => {
@@ -578,14 +583,16 @@ describe("Sheets Service - REST API Tests", () => {
           email: "test@example.com",
           timestamp: "2024-01-01T00:00:00.000Z",
           sheetTab: "Sheet1",
-          metadata: { key: "value" },
+          sheetId: "test-sheet-id",
+          metadata: '{"key":"value"}',
         },
         testConfig,
       );
 
       const appendCalls = fetchCalls.filter((c) => c.url.includes(":append"));
       const appendBody = getRequestBody(appendCalls[0]?.options);
-      expect(appendBody.values[0][5]).toBe('{"key":"value"}');
+      const values = appendBody["values"] as string[][];
+      expect(values[0][5]).toBe('{"key":"value"}');
     });
 
     test("should handle empty metadata", async () => {
@@ -636,13 +643,15 @@ describe("Sheets Service - REST API Tests", () => {
           email: "test@example.com",
           timestamp: "2024-01-01T00:00:00.000Z",
           sheetTab: "Sheet1",
+          sheetId: "test-sheet-id",
         },
         testConfig,
       );
 
       const appendCalls = fetchCalls.filter((c) => c.url.includes(":append"));
       const appendBody = getRequestBody(appendCalls[0]?.options);
-      expect(appendBody.values[0][5]).toBe(""); // Empty metadata
+      const values = appendBody["values"] as string[][];
+      expect(values[0][5]).toBe(""); // Empty metadata
     });
 
     test("should throw error on append failure", async () => {
@@ -684,11 +693,15 @@ describe("Sheets Service - REST API Tests", () => {
       });
 
       await expect(
-        appendSignup({
-          email: "test@example.com",
-          timestamp: "2024-01-01T00:00:00.000Z",
-          sheetTab: "Sheet1",
-        }),
+        appendSignup(
+          {
+            email: "test@example.com",
+            timestamp: "2024-01-01T00:00:00.000Z",
+            sheetTab: "Sheet1",
+            sheetId: "test-sheet-id",
+          },
+          testConfig,
+        ),
       ).rejects.toThrow("Failed to store signup data");
     });
   });
@@ -906,7 +919,7 @@ describe("Sheets Service - REST API Tests", () => {
       // Should only check Sheet2
       const valuesCalls = fetchCalls.filter((c) => c.url.includes("/values/"));
       expect(valuesCalls.length).toBe(1);
-      expect(valuesCalls[0].url).toContain("Sheet2");
+      expect(valuesCalls[0]?.url).toContain("Sheet2");
     });
 
     test("should return false on API errors gracefully", async () => {

@@ -5,8 +5,6 @@
 
 import { beforeEach, describe, expect, test } from "bun:test";
 import {
-  decrementActiveSignups,
-  incrementActiveSignups,
   recordHttpRequest,
   recordSheetsRequest,
   recordSignup,
@@ -160,34 +158,6 @@ describe.serial("Metrics Service - Unit Tests", () => {
 
       const metrics = await register.metrics();
       expect(metrics).toContain("turnstile_validation_duration_seconds");
-    });
-  });
-
-  describe("Active Signups Gauge", () => {
-    test("should increment active signups", async () => {
-      incrementActiveSignups();
-
-      const metrics = await register.metrics();
-      expect(metrics).toContain("active_signups 1");
-    });
-
-    test("should decrement active signups", async () => {
-      incrementActiveSignups();
-      incrementActiveSignups();
-      decrementActiveSignups();
-
-      const metrics = await register.metrics();
-      expect(metrics).toContain("active_signups 1");
-    });
-
-    test("should handle multiple increments and decrements", async () => {
-      incrementActiveSignups();
-      incrementActiveSignups();
-      incrementActiveSignups();
-      decrementActiveSignups();
-
-      const metrics = await register.metrics();
-      expect(metrics).toContain("active_signups 2");
     });
   });
 

@@ -57,26 +57,34 @@ const envSchema = z.object({
   LOG_LEVEL: z.string().default("info"),
 
   // Feature flags
-  ENABLE_EXTENDED_SIGNUP: booleanEnv(),
-  ENABLE_BULK_SIGNUP: booleanEnv(),
   ENABLE_METRICS: booleanEnv(),
-  ENABLE_HSTS: booleanEnv(),
 
-  // Rate limiting
-  ENABLE_RATE_LIMITING: booleanEnv(),
-  RATE_LIMIT_WINDOW_MS: z
+  // Multi-site support: "sheetId:siteName,sheetId:siteName,..."
+  ALLOWED_SHEETS: z
     .string()
-    .default("60000")
-    .transform((val) => parseInt(val, 10))
-    .refine((val) => !Number.isNaN(val) && val > 0, {
-      message: "RATE_LIMIT_WINDOW_MS must be a positive number",
+    .optional()
+    .transform((val) => {
+      if (!val) return new Map<string, string>();
+      const map = new Map<string, string>();
+      for (const pair of val.split(",")) {
+        const [sheetId, siteName] = pair.split(":").map((s) => s.trim());
+        if (sheetId && siteName) {
+          map.set(siteName, sheetId);
+        }
+      }
+      return map;
     }),
-  RATE_LIMIT_MAX_REQUESTS: z
+
+  // Configurable sheet tabs (comma-separated)
+  SHEET_TABS: z
     .string()
-    .default("100")
-    .transform((val) => parseInt(val, 10))
-    .refine((val) => !Number.isNaN(val) && val > 0, {
-      message: "RATE_LIMIT_MAX_REQUESTS must be a positive number",
+    .optional()
+    .transform((val) => {
+      if (!val) return ["Sheet1"];
+      return val
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
     }),
 });
 
@@ -99,15 +107,13 @@ export interface SignupConfig {
   allowedOrigins: string[];
 
   // Feature flags
-  enableExtendedSignup: boolean;
-  enableBulkSignup: boolean;
   enableMetrics: boolean;
-  enableHsts: boolean;
 
-  // Rate limiting
-  enableRateLimiting: boolean;
-  rateLimitWindowMs: number;
-  rateLimitMaxRequests: number;
+  // Multi-site support: siteName -> sheetId
+  allowedSheets: Map<string, string>;
+
+  // Configurable sheet tabs
+  sheetTabs: string[];
 }
 
 function loadEnv(): SignupConfig {
@@ -127,13 +133,9 @@ function loadEnv(): SignupConfig {
     turnstileSecretKey: env.CLOUDFLARE_TURNSTILE_SECRET_KEY,
     turnstileSiteKey: env.CLOUDFLARE_TURNSTILE_SITE_KEY,
     allowedOrigins: env.ALLOWED_ORIGINS,
-    enableExtendedSignup: env.ENABLE_EXTENDED_SIGNUP,
-    enableBulkSignup: env.ENABLE_BULK_SIGNUP,
     enableMetrics: env.ENABLE_METRICS,
-    enableHsts: env.ENABLE_HSTS,
-    enableRateLimiting: env.ENABLE_RATE_LIMITING,
-    rateLimitWindowMs: env.RATE_LIMIT_WINDOW_MS,
-    rateLimitMaxRequests: env.RATE_LIMIT_MAX_REQUESTS,
+    allowedSheets: env.ALLOWED_SHEETS,
+    sheetTabs: env.SHEET_TABS,
   };
 }
 

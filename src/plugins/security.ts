@@ -85,8 +85,8 @@ export const securityPlugin = (app: Elysia, config: SignupConfig) =>
     // Add Referrer-Policy header for privacy
     set.headers["Referrer-Policy"] = "strict-origin-when-cross-origin";
 
-    // Add HSTS header if enabled (recommended for production)
-    if (config.enableHsts) {
+    // Add HSTS header in non-development environments
+    if (process.env.NODE_ENV !== "development") {
       set.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains";
     }
   });

@@ -40,6 +40,36 @@ export interface SignupContext {
 }
 
 /**
+ * Resolve site name to sheetId
+ * Returns the sheetId from allowedSheets map, or default googleSheetId if no site specified
+ * Returns error if site is specified but not in allowlist
+ */
+function resolveSiteToSheetId(
+  site: string | undefined,
+  config: SignupConfig,
+): { sheetId: string } | { error: HandlerResult } {
+  // If no site specified, use default sheet
+  if (!site) {
+    return { sheetId: config.googleSheetId };
+  }
+
+  // Look up site in allowed sheets
+  const sheetId = config.allowedSheets.get(site);
+  if (!sheetId) {
+    return {
+      error: {
+        success: false,
+        statusCode: 400,
+        error: "Invalid site",
+        details: [`site: Site '${site}' is not configured`],
+      },
+    };
+  }
+
+  return { sheetId };
+}
+
+/**
  * Default context with real services
  */
 export function createDefaultContext(): SignupContext {
@@ -144,6 +174,7 @@ interface SignupData {
   email: string;
   timestamp: string;
   sheetTab: string;
+  sheetId: string;
   name?: string;
   source?: string;
   tags?: string[];
@@ -241,14 +272,21 @@ export async function handleSignup(data: SignupInput, ctx: SignupContext): Promi
     return validation.result;
   }
 
+  // Resolve site to sheetId
+  const siteResolution = resolveSiteToSheetId(validation.data.site, ctx.config);
+  if ("error" in siteResolution) {
+    return siteResolution.error;
+  }
+
   return processSignupRequest(
-    validation.data,
+    { ...validation.data, resolvedSheetId: siteResolution.sheetId },
     ctx,
     "/api/signup",
     (validated) => ({
       email: validated.email,
       timestamp: new Date().toISOString(),
       sheetTab: validated.sheetTab || ctx.config.defaultSheetTab,
+      sheetId: validated.resolvedSheetId,
       metadata: validated.metadata ? JSON.stringify(validated.metadata) : undefined,
     }),
     "New signup processed",
@@ -268,14 +306,21 @@ export async function handleExtendedSignup(
     return validation.result;
   }
 
+  // Resolve site to sheetId
+  const siteResolution = resolveSiteToSheetId(validation.data.site, ctx.config);
+  if ("error" in siteResolution) {
+    return siteResolution.error;
+  }
+
   return processSignupRequest(
-    validation.data,
+    { ...validation.data, resolvedSheetId: siteResolution.sheetId },
     ctx,
     "/api/signup/extended",
     (validated) => ({
       email: validated.email,
       timestamp: new Date().toISOString(),
       sheetTab: validated.sheetTab || ctx.config.defaultSheetTab,
+      sheetId: validated.resolvedSheetId,
       name: validated.name,
       source: validated.source,
       tags: validated.tags,
@@ -316,6 +361,14 @@ export async function handleBulkSignup(
 
     for (const signup of signups) {
       try {
+        // Resolve site to sheetId
+        const siteResolution = resolveSiteToSheetId(signup.site, ctx.config);
+        if ("error" in siteResolution) {
+          results.failed++;
+          results.errors.push(`${signup.email}: Invalid site '${signup.site}'`);
+          continue;
+        }
+
         // Check if email already exists
         const sheetsStartTime = Date.now();
         const exists = await ctx.sheets.emailExists(signup.email, signup.sheetTab, ctx.config);
@@ -333,6 +386,7 @@ export async function handleBulkSignup(
             email: signup.email,
             timestamp: new Date().toISOString(),
             sheetTab: signup.sheetTab || ctx.config.defaultSheetTab,
+            sheetId: siteResolution.sheetId,
             metadata: signup.metadata ? JSON.stringify(signup.metadata) : undefined,
           },
           ctx.config,

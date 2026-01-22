@@ -294,10 +294,12 @@ export async function initializeSheetTab(sheetTab: string, config: SignupConfig)
  * Append signup data to Google Sheet
  */
 export async function appendSignup(
-  data: SheetRowData & { sheetTab: string; tags?: string[] },
+  data: SheetRowData & { sheetTab: string; sheetId: string; tags?: string[] },
   config: SignupConfig,
 ): Promise<void> {
   try {
+    // Use provided sheetId or fall back to config default
+    const sheetId = data.sheetId || config.googleSheetId;
     await initializeSheetTab(data.sheetTab, config);
 
     const range = `${data.sheetTab}!A:A`;
@@ -306,7 +308,7 @@ export async function appendSignup(
     const normalizedEmail = data.email.toLowerCase();
 
     await sheetsRequest(
-      `/spreadsheets/${config.googleSheetId}/values/${encodeURIComponent(range)}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
+      `/spreadsheets/${sheetId}/values/${encodeURIComponent(range)}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
       ValueRangeSchema,
       config,
       {
@@ -322,7 +324,7 @@ export async function appendSignup(
               data.source || "api",
               data.name || "",
               data.tags && data.tags.length > 0 ? data.tags.join(", ") : "",
-              data.metadata ? JSON.stringify(data.metadata) : "",
+              data.metadata || "",
               data.sheetTab,
             ],
           ],
@@ -331,7 +333,7 @@ export async function appendSignup(
     );
 
     logger.info(
-      { email: normalizedEmail, sheetTab: data.sheetTab },
+      { email: normalizedEmail, sheetTab: data.sheetTab, sheetId },
       "Successfully appended signup to sheet",
     );
   } catch (error) {

@@ -23,11 +23,7 @@ beforeEach(() => {
   process.env["GOOGLE_SHEET_ID"] = "test-sheet-id";
   process.env["GOOGLE_CREDENTIALS_EMAIL"] = "test@test.com";
   process.env["GOOGLE_PRIVATE_KEY"] = "test-key";
-  process.env["ENABLE_EXTENDED_SIGNUP"] = "true";
-  process.env["ENABLE_BULK_SIGNUP"] = "true";
   process.env["ENABLE_METRICS"] = "true";
-  process.env["ENABLE_HSTS"] = "true";
-  process.env["ENABLE_RATE_LIMITING"] = "false"; // Disable for route tests
 
   mockContext = {
     sheets: {
@@ -45,13 +41,9 @@ beforeEach(() => {
       googleCredentialsEmail: "test@example.com",
       googlePrivateKey: "-----BEGIN PRIVATE KEY-----\ntest\n-----END PRIVATE KEY-----\n",
       allowedOrigins: ["*"],
-      enableExtendedSignup: true,
-      enableBulkSignup: true,
       enableMetrics: true,
-      enableHsts: true,
-      enableRateLimiting: false,
-      rateLimitWindowMs: 60000,
-      rateLimitMaxRequests: 100,
+      allowedSheets: new Map(),
+      sheetTabs: ["Sheet1"],
     },
   };
 });
@@ -99,93 +91,15 @@ describe("Route Configuration", () => {
     const body = (await response.json()) as {
       turnstileEnabled: boolean;
       defaultSheetTab: string;
+      sheetTabs: string[];
     };
     expect(body.defaultSheetTab).toBe("Sheet1");
     expect(body.turnstileEnabled).toBe(false);
+    expect(body.sheetTabs).toEqual(["Sheet1"]);
   });
 });
 
 describe("Feature Guards", () => {
-  describe("Extended Signup", () => {
-    test("should return 404 when extended signup is disabled", async () => {
-      const disabledContext: SignupContext = {
-        ...mockContext,
-        config: {
-          ...mockContext.config,
-          enableExtendedSignup: false,
-        },
-      };
-      const app = createSignupRoutes(disabledContext);
-
-      const response = await app.handle(
-        new Request("http://localhost/api/signup/extended", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email: "test@example.com" }),
-        }),
-      );
-
-      expect(response.status).toBe(404);
-      const body = (await response.json()) as { error: string };
-      expect(body.error).toBe("Not found");
-    });
-
-    test("should allow extended signup when enabled", async () => {
-      const app = createSignupRoutes(mockContext);
-
-      const response = await app.handle(
-        new Request("http://localhost/api/signup/extended", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email: "test@example.com" }),
-        }),
-      );
-
-      // Should not be 404 (could be 200 or validation error depending on request)
-      expect(response.status).not.toBe(404);
-    });
-  });
-
-  describe("Bulk Signup", () => {
-    test("should return 404 when bulk signup is disabled", async () => {
-      const disabledContext: SignupContext = {
-        ...mockContext,
-        config: {
-          ...mockContext.config,
-          enableBulkSignup: false,
-        },
-      };
-      const app = createSignupRoutes(disabledContext);
-
-      const response = await app.handle(
-        new Request("http://localhost/api/signup/bulk", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ signups: [{ email: "test@example.com" }] }),
-        }),
-      );
-
-      expect(response.status).toBe(404);
-      const body = (await response.json()) as { error: string };
-      expect(body.error).toBe("Not found");
-    });
-
-    test("should allow bulk signup when enabled", async () => {
-      const app = createSignupRoutes(mockContext);
-
-      const response = await app.handle(
-        new Request("http://localhost/api/signup/bulk", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ signups: [{ email: "test@example.com" }] }),
-        }),
-      );
-
-      // Should not be 404
-      expect(response.status).not.toBe(404);
-    });
-  });
-
   describe("Metrics", () => {
     test("should return 404 when metrics are disabled", async () => {
       const disabledContext: SignupContext = {
@@ -211,6 +125,38 @@ describe("Feature Guards", () => {
 
       expect(response.status).toBe(200);
       expect(response.headers.get("Content-Type")).toContain("text/plain");
+    });
+  });
+
+  describe("Extended and Bulk Signup", () => {
+    test("should allow extended signup (always enabled)", async () => {
+      const app = createSignupRoutes(mockContext);
+
+      const response = await app.handle(
+        new Request("http://localhost/api/signup/extended", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: "test@example.com" }),
+        }),
+      );
+
+      // Should not be 404 (could be 200 or validation error depending on request)
+      expect(response.status).not.toBe(404);
+    });
+
+    test("should allow bulk signup (always enabled)", async () => {
+      const app = createSignupRoutes(mockContext);
+
+      const response = await app.handle(
+        new Request("http://localhost/api/signup/bulk", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ signups: [{ email: "test@example.com" }] }),
+        }),
+      );
+
+      // Should not be 404
+      expect(response.status).not.toBe(404);
     });
   });
 });
@@ -287,5 +233,38 @@ describe("Embed Script Dynamic URL", () => {
 
     const body = await response.text();
     expect(body).toContain("https://secure.example.com");
+  });
+});
+
+describe("Form POST Endpoint", () => {
+  test("should accept application/x-www-form-urlencoded", async () => {
+    const app = createSignupRoutes(mockContext);
+
+    const response = await app.handle(
+      new Request("http://localhost/api/signup/form", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: "email=test@example.com&name=Test&sheetTab=Sheet1",
+      }),
+    );
+
+    // Should not be 415 (unsupported media type)
+    expect(response.status).not.toBe(415);
+  });
+
+  test("should reject unsupported content type", async () => {
+    const app = createSignupRoutes(mockContext);
+
+    const response = await app.handle(
+      new Request("http://localhost/api/signup/form", {
+        method: "POST",
+        headers: { "Content-Type": "text/plain" },
+        body: "email=test@example.com",
+      }),
+    );
+
+    expect(response.status).toBe(415);
+    const body = (await response.json()) as { error: string };
+    expect(body.error).toBe("Unsupported Media Type");
   });
 });

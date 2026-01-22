@@ -28,6 +28,7 @@ export const emailSchema = z
 export const signupSchema = z.object({
   email: emailSchema,
   sheetTab: z.string().min(1, "Sheet tab name is required").optional().default("Sheet1"),
+  site: z.string().min(1, "Site name is required").optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
   turnstileToken: z.string().optional(),
 });
@@ -96,50 +97,6 @@ export const errorResponseSchema = baseResponseSchema.extend({
 });
 
 /**
- * Validation error response schema (400)
- */
-export const validationErrorResponseSchema = errorResponseSchema.extend({
-  statusCode: z.literal(400),
-  error: z.literal("Validation failed"),
-  details: z.array(z.string()),
-});
-
-/**
- * Turnstile error response schema (400)
- */
-export const turnstileErrorResponseSchema = errorResponseSchema.extend({
-  statusCode: z.literal(400),
-  error: z.literal("Turnstile verification failed"),
-  details: z.array(z.string()),
-});
-
-/**
- * Conflict error response schema (409)
- */
-export const conflictErrorResponseSchema = errorResponseSchema.extend({
-  statusCode: z.literal(409),
-  error: z.literal("Email already registered"),
-});
-
-/**
- * Internal server error response schema (500)
- */
-export const internalErrorResponseSchema = errorResponseSchema.extend({
-  statusCode: z.literal(500),
-  error: z.literal("Internal server error"),
-});
-
-/**
- * Combined error response schema (union of all error types)
- */
-export const signUpErrorResponseSchema = z.union([
-  validationErrorResponseSchema,
-  turnstileErrorResponseSchema,
-  conflictErrorResponseSchema,
-  internalErrorResponseSchema,
-]);
-
-/**
  * Bulk signup result data schema
  */
 export const bulkResultDataSchema = z.object({
@@ -148,19 +105,6 @@ export const bulkResultDataSchema = z.object({
   duplicates: z.number(),
   errors: z.array(z.string()),
 });
-
-/**
- * Bulk signup response schema (200)
- */
-export const bulkSuccessResponseSchema = successResponseSchema.extend({
-  message: z.string(),
-  data: bulkResultDataSchema,
-});
-
-/**
- * Combined signup response schema (success or any error)
- */
-export const signupResponseSchema = z.union([successResponseSchema, signUpErrorResponseSchema]);
 
 /**
  * Health check response schema (200)

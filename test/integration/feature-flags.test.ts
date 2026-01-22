@@ -32,8 +32,6 @@ describe("Feature Flags - Integration Tests", () => {
       HOST: "0.0.0.0",
       CLOUDFLARE_TURNSTILE_SECRET_KEY: "1x0000000000000000000000000000000AA",
       CLOUDFLARE_TURNSTILE_SITE_KEY: "1x0000000000000000000000000000000AA",
-      ENABLE_EXTENDED_SIGNUP: "true",
-      ENABLE_BULK_SIGNUP: "true",
       ENABLE_METRICS: "true",
     });
     clearConfigCache();
@@ -51,40 +49,61 @@ describe("Feature Flags - Integration Tests", () => {
     CLOUDFLARE_TURNSTILE_SITE_KEY: "1x0000000000000000000000000000000AA",
   };
 
-  describe("ENABLE_EXTENDED_SIGNUP", () => {
-    test("should disable extended signup endpoint when false", async () => {
+  describe("ENABLE_METRICS", () => {
+    test("should disable metrics endpoint when false", async () => {
       setTestEnv({
         ...defaultEnv,
-        ENABLE_EXTENDED_SIGNUP: "false",
-        ENABLE_BULK_SIGNUP: "true",
+        ENABLE_METRICS: "false",
+      });
+      clearConfigCache();
+
+      const app = await getTestApp();
+
+      const response = await app.handle(new Request("http://localhost/api/metrics"));
+
+      // Should return 404 when disabled
+      expect(response.status).toBe(404);
+    });
+
+    test("should enable metrics endpoint when true", async () => {
+      setTestEnv({
+        ...defaultEnv,
         ENABLE_METRICS: "true",
       });
       clearConfigCache();
 
       const app = await getTestApp();
 
-      const response = await app.handle(
-        new Request("http://localhost/api/signup/extended", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            email: "test@example.com",
-            name: "Test User",
-            source: "api",
-            tags: ["test"],
-          }),
-        }),
-      );
+      const response = await app.handle(new Request("http://localhost/api/metrics"));
 
-      // Should return 404 when disabled
-      expect(response.status).toBe(404);
+      // Should return 200 when enabled
+      expect(response.status).toBe(200);
+      const contentType = response.headers.get("content-type");
+      expect(contentType).toContain("text/plain");
     });
+  });
 
-    test("should enable extended signup endpoint when true", async () => {
+  describe("Health check is always available", () => {
+    test("should keep health check available regardless of flags", async () => {
       setTestEnv({
         ...defaultEnv,
-        ENABLE_EXTENDED_SIGNUP: "true",
-        ENABLE_BULK_SIGNUP: "true",
+        ENABLE_METRICS: "false",
+      });
+      clearConfigCache();
+
+      const app = await getTestApp();
+
+      const response = await app.handle(new Request("http://localhost/api/health"));
+
+      // Health check should always work
+      expect(response.status).toBe(200);
+    });
+  });
+
+  describe("Extended and bulk signup are always available", () => {
+    test("should allow extended signup (no feature flag)", async () => {
+      setTestEnv({
+        ...defaultEnv,
         ENABLE_METRICS: "true",
       });
       clearConfigCache();
@@ -106,46 +125,13 @@ describe("Feature Flags - Integration Tests", () => {
         }),
       );
 
-      // Should return 200 when enabled (or validation error if schema differs)
-      expect([200, 409]).toContain(response.status);
+      // Should not return 404
       expect(response.status).not.toBe(404);
     });
-  });
 
-  describe("ENABLE_BULK_SIGNUP", () => {
-    test("should disable bulk signup endpoint when false", async () => {
+    test("should allow bulk signup (no feature flag)", async () => {
       setTestEnv({
         ...defaultEnv,
-        ENABLE_EXTENDED_SIGNUP: "true",
-        ENABLE_BULK_SIGNUP: "false",
-        ENABLE_METRICS: "true",
-      });
-      clearConfigCache();
-
-      const app = await getTestApp();
-
-      const response = await app.handle(
-        new Request("http://localhost/api/signup/bulk", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            signups: [
-              { email: "user1@example.com", turnstileToken: "valid-token" },
-              { email: "user2@example.com", turnstileToken: "valid-token" },
-            ],
-          }),
-        }),
-      );
-
-      // Should return 404 when disabled
-      expect(response.status).toBe(404);
-    });
-
-    test("should enable bulk signup endpoint when true", async () => {
-      setTestEnv({
-        ...defaultEnv,
-        ENABLE_EXTENDED_SIGNUP: "true",
-        ENABLE_BULK_SIGNUP: "true",
         ENABLE_METRICS: "true",
       });
       clearConfigCache();
@@ -166,66 +152,8 @@ describe("Feature Flags - Integration Tests", () => {
         }),
       );
 
-      // Should return 200 when enabled
-      expect([200, 409]).toContain(response.status);
+      // Should not return 404
       expect(response.status).not.toBe(404);
-    });
-  });
-
-  describe("ENABLE_METRICS", () => {
-    test("should disable metrics endpoint when false", async () => {
-      setTestEnv({
-        ...defaultEnv,
-        ENABLE_EXTENDED_SIGNUP: "true",
-        ENABLE_BULK_SIGNUP: "true",
-        ENABLE_METRICS: "false",
-      });
-      clearConfigCache();
-
-      const app = await getTestApp();
-
-      const response = await app.handle(new Request("http://localhost/api/metrics"));
-
-      // Should return 404 when disabled
-      expect(response.status).toBe(404);
-    });
-
-    test("should enable metrics endpoint when true", async () => {
-      setTestEnv({
-        ...defaultEnv,
-        ENABLE_EXTENDED_SIGNUP: "true",
-        ENABLE_BULK_SIGNUP: "true",
-        ENABLE_METRICS: "true",
-      });
-      clearConfigCache();
-
-      const app = await getTestApp();
-
-      const response = await app.handle(new Request("http://localhost/api/metrics"));
-
-      // Should return 200 when enabled
-      expect(response.status).toBe(200);
-      const contentType = response.headers.get("content-type");
-      expect(contentType).toContain("text/plain");
-    });
-  });
-
-  describe("Health check is always available", () => {
-    test("should keep health check available regardless of flags", async () => {
-      setTestEnv({
-        ...defaultEnv,
-        ENABLE_EXTENDED_SIGNUP: "false",
-        ENABLE_BULK_SIGNUP: "false",
-        ENABLE_METRICS: "false",
-      });
-      clearConfigCache();
-
-      const app = await getTestApp();
-
-      const response = await app.handle(new Request("http://localhost/api/health"));
-
-      // Health check should always work
-      expect(response.status).toBe(200);
     });
   });
 });

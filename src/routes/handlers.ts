@@ -138,21 +138,42 @@ function validateAndTransformSignup<T>(
 }
 
 /**
- * Handle basic signup
+ * Signup data structure for Google Sheets
  */
-export async function handleSignup(data: SignupInput, ctx: SignupContext): Promise<HandlerResult> {
-  const startTime = Date.now();
+interface SignupData {
+  email: string;
+  timestamp: string;
+  sheetTab: string;
+  name?: string;
+  source?: string;
+  tags?: string[];
+  metadata?: string;
+}
 
-  // Validate and apply transformations (email lowercasing, trimming)
-  const validation = validateAndTransformSignup(data, signupSchema);
-  if (!validation.success) {
-    return validation.result;
-  }
-  const { email, sheetTab, metadata, turnstileToken } = validation.data;
+/**
+ * Common signup processing flow
+ * Handles validation, turnstile verification, duplicate checking, and storage
+ *
+ * @param data - The validated signup data
+ * @param ctx - The signup context with services
+ * @param route - The route path for metrics recording
+ * @param buildSignupData - Function to build signup data from validated input
+ * @param logMessage - Log message for successful signup
+ */
+async function processSignupRequest<
+  T extends { email: string; sheetTab?: string; turnstileToken?: string },
+>(
+  data: T,
+  ctx: SignupContext,
+  route: string,
+  buildSignupData: (validated: T) => SignupData,
+  logMessage: string,
+): Promise<HandlerResult> {
+  const startTime = Date.now();
 
   try {
     // Validate Turnstile token if configured
-    const turnstileResult = await validateTurnstileToken(turnstileToken, ctx);
+    const turnstileResult = await validateTurnstileToken(data.turnstileToken, ctx);
     if (turnstileResult) {
       return turnstileResult;
     }
@@ -161,11 +182,11 @@ export async function handleSignup(data: SignupInput, ctx: SignupContext): Promi
     const sheetsStartTime = Date.now();
     let exists = false;
     try {
-      exists = await ctx.sheets.emailExists(email, sheetTab, ctx.config);
+      exists = await ctx.sheets.emailExists(data.email, data.sheetTab, ctx.config);
       recordSheetsRequest("emailExists", true, (Date.now() - sheetsStartTime) / 1000);
     } catch (error) {
       recordSheetsRequest("emailExists", false, (Date.now() - sheetsStartTime) / 1000);
-      throw error; // Re-throw to be caught by outer handler
+      throw error;
     }
 
     if (exists) {
@@ -179,25 +200,17 @@ export async function handleSignup(data: SignupInput, ctx: SignupContext): Promi
     // Store in Google Sheets
     const appendStartTime = Date.now();
     try {
-      await ctx.sheets.appendSignup(
-        {
-          email,
-          timestamp: new Date().toISOString(),
-          sheetTab: sheetTab || ctx.config.defaultSheetTab,
-          metadata: metadata ? JSON.stringify(metadata) : undefined,
-        },
-        ctx.config,
-      );
+      await ctx.sheets.appendSignup(buildSignupData(data), ctx.config);
       recordSheetsRequest("appendSignup", true, (Date.now() - appendStartTime) / 1000);
     } catch (error) {
       recordSheetsRequest("appendSignup", false, (Date.now() - appendStartTime) / 1000);
-      throw error; // Re-throw to be caught by outer handler
+      throw error;
     }
 
-    logger.info({ email }, "New signup processed");
+    logger.info({ email: data.email }, logMessage);
 
     const duration = (Date.now() - startTime) / 1000;
-    recordSignup("/api/signup", true, duration);
+    recordSignup(route, true, duration);
 
     return {
       success: true,
@@ -205,10 +218,10 @@ export async function handleSignup(data: SignupInput, ctx: SignupContext): Promi
       message: "Successfully signed up!",
     };
   } catch (error) {
-    logger.error({ error }, "Signup failed");
+    logger.error({ error }, `${logMessage} failed`);
 
     const duration = (Date.now() - startTime) / 1000;
-    recordSignup("/api/signup", false, duration);
+    recordSignup(route, false, duration);
 
     return {
       success: false,
@@ -219,90 +232,57 @@ export async function handleSignup(data: SignupInput, ctx: SignupContext): Promi
 }
 
 /**
+ * Handle basic signup
+ */
+export async function handleSignup(data: SignupInput, ctx: SignupContext): Promise<HandlerResult> {
+  // Validate and apply transformations (email lowercasing, trimming)
+  const validation = validateAndTransformSignup(data, signupSchema);
+  if (!validation.success) {
+    return validation.result;
+  }
+
+  return processSignupRequest(
+    validation.data,
+    ctx,
+    "/api/signup",
+    (validated) => ({
+      email: validated.email,
+      timestamp: new Date().toISOString(),
+      sheetTab: validated.sheetTab || ctx.config.defaultSheetTab,
+      metadata: validated.metadata ? JSON.stringify(validated.metadata) : undefined,
+    }),
+    "New signup processed",
+  );
+}
+
+/**
  * Handle extended signup with additional fields
  */
 export async function handleExtendedSignup(
   data: ExtendedSignupInput,
   ctx: SignupContext,
 ): Promise<HandlerResult> {
-  const startTime = Date.now();
-
   // Validate and apply transformations
   const validation = validateAndTransformSignup(data, extendedSignupSchema);
   if (!validation.success) {
     return validation.result;
   }
-  const { email, sheetTab, name, source, tags, metadata, turnstileToken } = validation.data;
 
-  try {
-    // Validate Turnstile token if configured
-    const turnstileResult = await validateTurnstileToken(turnstileToken, ctx);
-    if (turnstileResult) {
-      return turnstileResult;
-    }
-
-    // Check if email already exists
-    const sheetsStartTime = Date.now();
-    let exists = false;
-    try {
-      exists = await ctx.sheets.emailExists(email, sheetTab, ctx.config);
-      recordSheetsRequest("emailExists", true, (Date.now() - sheetsStartTime) / 1000);
-    } catch (error) {
-      recordSheetsRequest("emailExists", false, (Date.now() - sheetsStartTime) / 1000);
-      throw error; // Re-throw to be caught by outer handler
-    }
-
-    if (exists) {
-      return {
-        success: false,
-        statusCode: 409,
-        error: "Email already registered",
-      };
-    }
-
-    // Store in Google Sheets
-    const appendStartTime = Date.now();
-    try {
-      await ctx.sheets.appendSignup(
-        {
-          email,
-          timestamp: new Date().toISOString(),
-          sheetTab: sheetTab || ctx.config.defaultSheetTab,
-          name,
-          source,
-          tags,
-          metadata: metadata ? JSON.stringify(metadata) : undefined,
-        },
-        ctx.config,
-      );
-      recordSheetsRequest("appendSignup", true, (Date.now() - appendStartTime) / 1000);
-    } catch (error) {
-      recordSheetsRequest("appendSignup", false, (Date.now() - appendStartTime) / 1000);
-      throw error; // Re-throw to be caught by outer handler
-    }
-
-    logger.info({ email }, "Extended signup processed");
-
-    const duration = (Date.now() - startTime) / 1000;
-    recordSignup("/api/signup/extended", true, duration);
-
-    return {
-      success: true,
-      statusCode: 200,
-      message: "Successfully signed up!",
-    };
-  } catch (error) {
-    logger.error({ error }, "Extended signup failed");
-
-    const duration = (Date.now() - startTime) / 1000;
-    recordSignup("/api/signup/extended", false, duration);
-
-    return {
-      success: false,
-      statusCode: 500,
-      error: "Internal server error",
-    };
-  }
+  return processSignupRequest(
+    validation.data,
+    ctx,
+    "/api/signup/extended",
+    (validated) => ({
+      email: validated.email,
+      timestamp: new Date().toISOString(),
+      sheetTab: validated.sheetTab || ctx.config.defaultSheetTab,
+      name: validated.name,
+      source: validated.source,
+      tags: validated.tags,
+      metadata: validated.metadata ? JSON.stringify(validated.metadata) : undefined,
+    }),
+    "Extended signup processed",
+  );
 }
 
 /**

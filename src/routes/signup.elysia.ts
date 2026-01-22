@@ -17,6 +17,7 @@ import { bulkSignupSchema, extendedSignupSchema, signupSchema } from "../schemas
 import { register } from "../services/metrics";
 import { getEmbedScript } from "../static/embed-script";
 import { HTML_FORM_CONTENT } from "../static/html-form";
+import { hasSetProperty, hasStatusProperty, isObject } from "../utils/type-guards";
 import {
   createDefaultContext,
   handleBulkSignup,
@@ -25,29 +26,6 @@ import {
   handleSignup,
   type SignupContext,
 } from "./handlers";
-
-/**
- * Type guard to check if value is an object with a set property
- */
-function isObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
-
-/**
- * Type guard to check if object has a set property that is an object
- */
-function hasSetProperty(obj: Record<string, unknown>): obj is { set: Record<string, unknown> } {
-  return "set" in obj && isObject(obj["set"]);
-}
-
-/**
- * Type guard to check if set has a status property that is a number
- */
-function hasStatusProperty(
-  set: Record<string, unknown>,
-): set is { status: number } & Record<string, unknown> {
-  return "status" in set && typeof set["status"] === "number";
-}
 
 /**
  * Type for a beforeHandle guard function

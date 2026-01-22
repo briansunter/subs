@@ -15,47 +15,9 @@ import { loggingPlugin } from "./plugins/logging";
 import { metricsPlugin } from "./plugins/metrics";
 import { rateLimitPlugin } from "./plugins/rate-limit";
 import { securityPlugin } from "./plugins/security";
+import { hasValueError, hasValueErrors } from "./utils/type-guards";
 
 const config = getConfig();
-
-/**
- * Type guard to check if value is an object
- */
-function isObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
-
-/**
- * Type guard for Elysia valueErrors array structure
- */
-function hasValueErrors(error: unknown): error is {
-  valueErrors: {
-    path?: string[] | string;
-    message: string;
-  }[];
-} {
-  if (isObject(error) && "valueErrors" in error) {
-    const valueErrors = error["valueErrors"];
-    return Array.isArray(valueErrors);
-  }
-  return false;
-}
-
-/**
- * Type guard for Elysia single valueError structure
- */
-function hasValueError(error: unknown): error is {
-  valueError: {
-    path?: string[] | string;
-    message: string;
-  };
-} {
-  if (isObject(error) && "valueError" in error) {
-    const valueError = error["valueError"];
-    return isObject(valueError);
-  }
-  return false;
-}
 
 /**
  * Extract validation error details from Elysia ValidationError

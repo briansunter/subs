@@ -5,6 +5,16 @@
 import { z } from "zod";
 
 /**
+ * Helper for boolean environment variables
+ * Converts string "true"/"false" to boolean with a default value
+ */
+const booleanEnv = (defaultValue = "true") =>
+  z
+    .string()
+    .default(defaultValue)
+    .transform((val) => val.toLowerCase() === "true");
+
+/**
  * Zod schema for environment variable validation
  */
 const envSchema = z.object({
@@ -47,28 +57,13 @@ const envSchema = z.object({
   LOG_LEVEL: z.string().default("info"),
 
   // Feature flags
-  ENABLE_EXTENDED_SIGNUP: z
-    .string()
-    .default("true")
-    .transform((val) => val.toLowerCase() === "true"),
-  ENABLE_BULK_SIGNUP: z
-    .string()
-    .default("true")
-    .transform((val) => val.toLowerCase() === "true"),
-  ENABLE_METRICS: z
-    .string()
-    .default("true")
-    .transform((val) => val.toLowerCase() === "true"),
-  ENABLE_HSTS: z
-    .string()
-    .default("true")
-    .transform((val) => val.toLowerCase() === "true"),
+  ENABLE_EXTENDED_SIGNUP: booleanEnv(),
+  ENABLE_BULK_SIGNUP: booleanEnv(),
+  ENABLE_METRICS: booleanEnv(),
+  ENABLE_HSTS: booleanEnv(),
 
   // Rate limiting
-  ENABLE_RATE_LIMITING: z
-    .string()
-    .default("true")
-    .transform((val) => val.toLowerCase() === "true"),
+  ENABLE_RATE_LIMITING: booleanEnv(),
   RATE_LIMIT_WINDOW_MS: z
     .string()
     .default("60000")

@@ -89,6 +89,40 @@ export const DEFAULT_TEST_ENV = {
 } as const;
 
 /**
+ * Setup test environment with optional overrides
+ *
+ * Applies DEFAULT_TEST_ENV with any custom overrides, clears config cache,
+ * and resets all mocks. Use this in beforeEach hooks to ensure test isolation.
+ *
+ * @example
+ * ```ts
+ * beforeEach(() => {
+ *   setupTestEnv();
+ * });
+ *
+ * // With overrides:
+ * beforeEach(() => {
+ *   setupTestEnv({ ENABLE_METRICS: "false" });
+ * });
+ * ```
+ *
+ * @param overrides - Optional environment variable overrides
+ */
+export function setupTestEnv(overrides?: Partial<typeof DEFAULT_TEST_ENV>): void {
+  // Apply default test environment with any overrides
+  const envToApply = { ...DEFAULT_TEST_ENV, ...overrides };
+  for (const [key, value] of Object.entries(envToApply)) {
+    process.env[key] = value;
+  }
+
+  // Clear config cache so new env vars are picked up
+  _clearConfigCache();
+
+  // Reset all mocks
+  resetAllMocks();
+}
+
+/**
  * Cloudflare Turnstile test token that always passes
  * From: https://developers.cloudflare.com/turnstile/reference/testing
  */

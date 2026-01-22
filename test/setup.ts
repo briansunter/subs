@@ -23,3 +23,9 @@ process.env["CLOUDFLARE_TURNSTILE_SITE_KEY"] = "1x000000000000000000000000000000
 process.env["ENABLE_EXTENDED_SIGNUP"] = "true";
 process.env["ENABLE_BULK_SIGNUP"] = "true";
 process.env["ENABLE_METRICS"] = "true";
+process.env["ENABLE_HSTS"] = "true";
+
+// Disable rate limiting for tests to avoid flaky tests
+process.env["ENABLE_RATE_LIMITING"] = "false";
+process.env["RATE_LIMIT_WINDOW_MS"] = "60000";
+process.env["RATE_LIMIT_MAX_REQUESTS"] = "100";

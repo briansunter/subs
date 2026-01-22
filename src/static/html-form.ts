@@ -194,6 +194,25 @@ export const HTML_FORM_CONTENT = `<!DOCTYPE html>
     const apiEndpoint = urlParams.get('api') || '/api/signup/extended';
     const redirectUrl = urlParams.get('redirect');
 
+    // Validated parent origin for postMessage (set when receiving messages)
+    let validatedParentOrigin = null;
+
+    /**
+     * Validate redirect URL to prevent open redirect attacks
+     * Only allows relative paths (starting with /) or same-origin URLs
+     */
+    function isValidRedirectUrl(url) {
+      if (!url) return false;
+      // Allow relative paths (but not protocol-relative URLs like //)
+      if (url.startsWith('/') && !url.startsWith('//')) return true;
+      try {
+        const redirectOrigin = new URL(url, window.location.origin).origin;
+        return redirectOrigin === window.location.origin;
+      } catch {
+        return false;
+      }
+    }
+
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
 
@@ -229,8 +248,8 @@ export const HTML_FORM_CONTENT = `<!DOCTYPE html>
           messageEl.classList.add('success', 'show');
           form.reset();
 
-          // Redirect if redirect URL is provided
-          if (redirectUrl) {
+          // Redirect if redirect URL is provided and validated
+          if (redirectUrl && isValidRedirectUrl(redirectUrl)) {
             setTimeout(() => {
               window.location.href = redirectUrl;
             }, 1500);
@@ -252,9 +271,10 @@ export const HTML_FORM_CONTENT = `<!DOCTYPE html>
     window.addEventListener('message', (event) => {
       // Validate origin for security
       const allowedOrigins = ${JSON.stringify(config.allowedOrigins)};
-      if (allowedOrigins.includes('*') ||
-          allowedOrigins.includes(event.origin) ||
-          ${JSON.stringify(config.allowedOrigins)}.includes('*')) {
+      if (allowedOrigins.includes('*') || allowedOrigins.includes(event.origin)) {
+        // Store validated parent origin for secure postMessage responses
+        validatedParentOrigin = event.origin;
+
         if (event.data === 'getFormData') {
           // Send form data back to parent
           window.parent.postMessage({
@@ -266,12 +286,14 @@ export const HTML_FORM_CONTENT = `<!DOCTYPE html>
     });
 
     // Notify parent when form is submitted successfully
+    // Uses validated parent origin instead of wildcard for security
     function notifyParent(type, data) {
+      const targetOrigin = validatedParentOrigin || '*';
       window.parent.postMessage({
         type: 'signup',
         status: type,
         data: data
-      }, '*');
+      }, targetOrigin);
     }
   </script>
 </body>

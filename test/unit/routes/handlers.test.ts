@@ -73,6 +73,10 @@ describe("Route Handlers - Unit Tests", () => {
         enableExtendedSignup: true,
         enableBulkSignup: true,
         enableMetrics: true,
+        enableHsts: true,
+        enableRateLimiting: false,
+        rateLimitWindowMs: 60000,
+        rateLimitMaxRequests: 100,
       },
     };
   });

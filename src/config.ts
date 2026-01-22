@@ -59,6 +59,30 @@ const envSchema = z.object({
     .string()
     .default("true")
     .transform((val) => val.toLowerCase() === "true"),
+  ENABLE_HSTS: z
+    .string()
+    .default("true")
+    .transform((val) => val.toLowerCase() === "true"),
+
+  // Rate limiting
+  ENABLE_RATE_LIMITING: z
+    .string()
+    .default("true")
+    .transform((val) => val.toLowerCase() === "true"),
+  RATE_LIMIT_WINDOW_MS: z
+    .string()
+    .default("60000")
+    .transform((val) => parseInt(val, 10))
+    .refine((val) => !Number.isNaN(val) && val > 0, {
+      message: "RATE_LIMIT_WINDOW_MS must be a positive number",
+    }),
+  RATE_LIMIT_MAX_REQUESTS: z
+    .string()
+    .default("100")
+    .transform((val) => parseInt(val, 10))
+    .refine((val) => !Number.isNaN(val) && val > 0, {
+      message: "RATE_LIMIT_MAX_REQUESTS must be a positive number",
+    }),
 });
 
 export interface SignupConfig {
@@ -83,6 +107,12 @@ export interface SignupConfig {
   enableExtendedSignup: boolean;
   enableBulkSignup: boolean;
   enableMetrics: boolean;
+  enableHsts: boolean;
+
+  // Rate limiting
+  enableRateLimiting: boolean;
+  rateLimitWindowMs: number;
+  rateLimitMaxRequests: number;
 }
 
 function loadEnv(): SignupConfig {
@@ -105,6 +135,10 @@ function loadEnv(): SignupConfig {
     enableExtendedSignup: env.ENABLE_EXTENDED_SIGNUP,
     enableBulkSignup: env.ENABLE_BULK_SIGNUP,
     enableMetrics: env.ENABLE_METRICS,
+    enableHsts: env.ENABLE_HSTS,
+    enableRateLimiting: env.ENABLE_RATE_LIMITING,
+    rateLimitWindowMs: env.RATE_LIMIT_WINDOW_MS,
+    rateLimitMaxRequests: env.RATE_LIMIT_MAX_REQUESTS,
   };
 }
 

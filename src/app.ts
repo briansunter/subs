@@ -13,6 +13,7 @@ import { Elysia, type ElysiaConfig } from "elysia";
 import { getConfig } from "./config";
 import { loggingPlugin } from "./plugins/logging";
 import { metricsPlugin } from "./plugins/metrics";
+import { rateLimitPlugin } from "./plugins/rate-limit";
 import { securityPlugin } from "./plugins/security";
 
 const config = getConfig();
@@ -111,6 +112,8 @@ export const createApp = (elysiaOptions?: Partial<ElysiaConfig<"">>) => {
           maxAge: 86400, // 24 hours
         }),
       )
+      // Rate limiting plugin (must be before other plugins)
+      .use((app) => rateLimitPlugin(app, config))
       // Security headers plugin
       .use((app) => securityPlugin(app, config))
       // Logging plugin

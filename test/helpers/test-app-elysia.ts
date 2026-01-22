@@ -82,6 +82,10 @@ export const DEFAULT_TEST_ENV = {
   ENABLE_EXTENDED_SIGNUP: "true",
   ENABLE_BULK_SIGNUP: "true",
   ENABLE_METRICS: "true",
+  ENABLE_HSTS: "true",
+  ENABLE_RATE_LIMITING: "false",
+  RATE_LIMIT_WINDOW_MS: "60000",
+  RATE_LIMIT_MAX_REQUESTS: "100",
 } as const;
 
 /**

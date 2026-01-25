@@ -11,6 +11,10 @@ RUN bun install --frozen-lockfile
 # Copy source code
 COPY . .
 
+# Set production environment for compile-time evaluation
+# This ensures pino-pretty transport is NOT included in the binary
+ENV NODE_ENV=production
+
 # Compile to standalone binary (includes all dependencies)
 RUN bun build index.ts \
   --compile \

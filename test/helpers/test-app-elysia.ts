@@ -216,44 +216,13 @@ export function getFetchCallsWithBody(
 
 /**
  * Type-safe helper to create a mock Response object
- * Eliminates need for `as unknown as Response` type assertions
- *
- * Creates a minimal Response-like object that satisfies TypeScript's Response interface
- * for testing purposes without requiring type casting.
- *
- * @example
- * ```ts
- * const mock = createMockResponse(200, { success: true });
- * expect(mock.status).toBe(200);
- * const data = await mock.json();
- * expect(data.success).toBe(true);
- * ```
  */
 export function createMockResponse(status: number, data: unknown): Response {
-  return {
-    ok: status >= 200 && status < 300,
+  return new Response(JSON.stringify(data), {
     status,
     statusText: status === 200 ? "OK" : status === 401 ? "Unauthorized" : "Error",
-    json: async () => data,
-    text: async () => JSON.stringify(data),
-    headers: new Headers(),
-    cloned: false,
-    redirect: "follow",
-    type: "basic",
-    url: "",
-    body: null,
-    bodyUsed: false,
-    arrayBuffer: async () => new ArrayBuffer(0),
-    blob: async () => new Blob(),
-    formData: async () => new FormData(),
-    clone(): Response {
-      return this;
-    },
-    redirected: false,
-    bytes() {
-      return Promise.resolve(new ArrayBuffer(0));
-    },
-  };
+    headers: { "Content-Type": "application/json" },
+  });
 }
 
 /**

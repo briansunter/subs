@@ -17,7 +17,7 @@ import { bulkSignupSchema, extendedSignupSchema, signupSchema } from "../schemas
 import { register } from "../services/metrics";
 import { getEmbedScript } from "../static/embed-script";
 import { HTML_FORM_CONTENT } from "../static/html-form";
-import { hasSetProperty, hasStatusProperty, isObject } from "../utils/type-guards";
+import { hasSetProperty, isObject } from "../utils/type-guards";
 import {
   createDefaultContext,
   handleBulkSignup,
@@ -43,8 +43,8 @@ function createFeatureGuard(isEnabled: boolean): undefined | GuardFunction[] {
     ? undefined
     : [
         (context: unknown) => {
-          // Use type guards to safely access nested properties
-          if (isObject(context) && hasSetProperty(context) && hasStatusProperty(context["set"])) {
+          // Use type guard to safely access nested properties
+          if (isObject(context) && hasSetProperty(context)) {
             context["set"]["status"] = 404;
           }
           return { error: "Not found" };
@@ -56,12 +56,7 @@ function createFeatureGuard(isEnabled: boolean): undefined | GuardFunction[] {
  * Parse form-urlencoded body
  */
 function parseFormBody(body: string): Record<string, string> {
-  const params = new URLSearchParams(body);
-  const result: Record<string, string> = {};
-  for (const [key, value] of params.entries()) {
-    result[key] = value;
-  }
-  return result;
+  return Object.fromEntries(new URLSearchParams(body));
 }
 
 /**

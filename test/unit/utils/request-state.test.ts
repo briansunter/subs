@@ -7,89 +7,9 @@ import { describe, expect, test } from "bun:test";
 import {
   getRequestFlag,
   getRequestStartTime,
-  RequestState,
-  requestStartTime,
   setRequestFlag,
   setRequestStartTime,
 } from "../../../src/utils/request-state";
-
-describe("RequestState", () => {
-  describe("basic operations", () => {
-    test("should store and retrieve values", () => {
-      const state = new RequestState<string>();
-      const request = new Request("http://localhost/test");
-
-      state.set(request, "test-value");
-      expect(state.get(request, "default")).toBe("test-value");
-    });
-
-    test("should return default value when not set", () => {
-      const state = new RequestState<number>();
-      const request = new Request("http://localhost/test");
-
-      expect(state.get(request, 42)).toBe(42);
-    });
-
-    test("should check if request has a value", () => {
-      const state = new RequestState<string>();
-      const request = new Request("http://localhost/test");
-
-      expect(state.has(request)).toBe(false);
-      state.set(request, "value");
-      expect(state.has(request)).toBe(true);
-    });
-
-    test("should delete values", () => {
-      const state = new RequestState<string>();
-      const request = new Request("http://localhost/test");
-
-      state.set(request, "value");
-      expect(state.has(request)).toBe(true);
-
-      state.delete(request);
-      expect(state.has(request)).toBe(false);
-      expect(state.get(request, "default")).toBe("default");
-    });
-
-    test("should isolate state between requests", () => {
-      const state = new RequestState<string>();
-      const request1 = new Request("http://localhost/test1");
-      const request2 = new Request("http://localhost/test2");
-
-      state.set(request1, "value1");
-      state.set(request2, "value2");
-
-      expect(state.get(request1, "default")).toBe("value1");
-      expect(state.get(request2, "default")).toBe("value2");
-    });
-  });
-
-  describe("typed values", () => {
-    test("should handle numeric values", () => {
-      const state = new RequestState<number>();
-      const request = new Request("http://localhost/test");
-
-      state.set(request, 123);
-      expect(state.get(request, 0)).toBe(123);
-    });
-
-    test("should handle object values", () => {
-      const state = new RequestState<{ key: string }>();
-      const request = new Request("http://localhost/test");
-
-      state.set(request, { key: "value" });
-      expect(state.get(request, { key: "default" })).toEqual({ key: "value" });
-    });
-
-    test("should handle boolean values", () => {
-      const state = new RequestState<boolean>();
-      const request = new Request("http://localhost/test");
-
-      state.set(request, true);
-      expect(state.get(request, false)).toBe(true);
-    });
-  });
-});
 
 describe("requestStartTime helpers", () => {
   test("should set and get request start time", () => {
@@ -111,13 +31,15 @@ describe("requestStartTime helpers", () => {
     expect(result).toBeLessThanOrEqual(after);
   });
 
-  test("should use shared requestStartTime instance", () => {
-    const request = new Request("http://localhost/shared");
-    const startTime = 1234567890;
+  test("should isolate start times between requests", () => {
+    const request1 = new Request("http://localhost/test1");
+    const request2 = new Request("http://localhost/test2");
 
-    // Use the exported instance directly
-    requestStartTime.set(request, startTime);
-    expect(getRequestStartTime(request)).toBe(startTime);
+    setRequestStartTime(request1, 1000);
+    setRequestStartTime(request2, 2000);
+
+    expect(getRequestStartTime(request1)).toBe(1000);
+    expect(getRequestStartTime(request2)).toBe(2000);
   });
 });
 

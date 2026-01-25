@@ -287,6 +287,9 @@ export function getHtmlFormContent(config: SignupConfig): string {
           messageEl.className = 'message success show';
           form.reset();
 
+          // Notify parent iframe of success
+          notifyParent('success', { email });
+
           // Redirect if redirect URL is provided and validated
           if (redirectUrl && isValidRedirectUrl(redirectUrl)) {
             setTimeout(() => {
@@ -296,6 +299,9 @@ export function getHtmlFormContent(config: SignupConfig): string {
         } else {
           messageEl.textContent = data.error || 'An error occurred. Please try again.';
           messageEl.className = 'message error show';
+
+          // Notify parent iframe of error
+          notifyParent('error', { error: data.error });
         }
       } catch (error) {
         messageEl.textContent = 'Network error. Please try again.';

@@ -1,6 +1,6 @@
 /**
  * Route handler business logic
- * Extracted from Fastify routes for testability
+ * Extracted from Elysia routes for testability
  */
 
 import type { z } from "zod";

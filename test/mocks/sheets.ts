@@ -19,27 +19,17 @@ const mockSheetData: Map<
 let mockAuthError: Error | null = null;
 let mockWriteError: Error | null = null;
 
-// Operation history tracking (optional, disabled by default for performance)
-interface OperationEntry {
-  operation: "initializeSheetTab" | "appendSignup" | "emailExists";
-  timestamp: number;
-  data?: Record<string, unknown>;
-}
-const operationLog: OperationEntry[] = [];
-let enableOperationLogging = false;
+// Simple call counters
+let appendSignupCalls = 0;
+let emailExistsCalls = 0;
 
 export const mockSheetsService = {
   reset() {
     mockSheetData.clear();
     mockAuthError = null;
     mockWriteError = null;
-    operationLog.length = 0;
-    enableOperationLogging = false;
-  },
-
-  // Enable operation logging for tests that need to verify calls
-  enableOperationLogging() {
-    enableOperationLogging = true;
+    appendSignupCalls = 0;
+    emailExistsCalls = 0;
   },
 
   setAuthError(error: Error | null) {
@@ -71,33 +61,17 @@ export const mockSheetsService = {
     return mockSheetData.get(sheetTab) || [];
   },
 
-  // Track operation history
-  getOperationHistory(): OperationEntry[] {
-    return Array.from(operationLog);
+  // Simple call counting
+  getAppendSignupCalls(): number {
+    return appendSignupCalls;
   },
 
-  // Verify specific calls
-  assertCalledWithEmail(email: string): boolean {
-    return operationLog.some(
-      (op) => op.operation === "appendSignup" && op.data?.["email"] === email,
-    );
+  getEmailExistsCalls(): number {
+    return emailExistsCalls;
   },
 
-  // Count operations by type
-  countOperations(operation: OperationEntry["operation"]): number {
-    return operationLog.filter((op) => op.operation === operation).length;
-  },
-
-  // Mock implementation
+  // Mock implementations
   initializeSheetTab: async (sheetTab: string, _config: unknown) => {
-    if (enableOperationLogging) {
-      operationLog.push({
-        operation: "initializeSheetTab",
-        timestamp: Date.now(),
-        data: { sheetTab },
-      });
-    }
-
     if (mockAuthError) throw mockAuthError;
     if (!mockSheetData.has(sheetTab)) {
       mockSheetData.set(sheetTab, []);
@@ -116,14 +90,7 @@ export const mockSheetsService = {
     },
     _config: unknown,
   ) => {
-    if (enableOperationLogging) {
-      operationLog.push({
-        operation: "appendSignup",
-        timestamp: Date.now(),
-        data: { email: data.email, sheetTab: data.sheetTab },
-      });
-    }
-
+    appendSignupCalls++;
     if (mockAuthError) throw mockAuthError;
     if (mockWriteError) throw mockWriteError;
 
@@ -143,14 +110,7 @@ export const mockSheetsService = {
   },
 
   emailExists: async (email: string, sheetTab: string | undefined, _config: unknown) => {
-    if (enableOperationLogging) {
-      operationLog.push({
-        operation: "emailExists",
-        timestamp: Date.now(),
-        data: { email, sheetTab },
-      });
-    }
-
+    emailExistsCalls++;
     if (mockAuthError) throw mockAuthError;
 
     const tabs = sheetTab ? [sheetTab] : Array.from(mockSheetData.keys());
@@ -167,6 +127,3 @@ export const mockSheetsService = {
     return false;
   },
 };
-
-// Export for use in tests
-export { mockSheetData, mockAuthError, mockWriteError, operationLog };

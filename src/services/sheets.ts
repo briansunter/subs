@@ -300,17 +300,19 @@ export async function appendSignup(
   try {
     // Use provided sheetId or fall back to config default
     const sheetId = data.sheetId || config.googleSheetId;
-    await initializeSheetTab(data.sheetTab, config);
+
+    // Create config override with the resolved sheetId for initialization
+    const configWithSheetId = { ...config, googleSheetId: sheetId };
+    await initializeSheetTab(data.sheetTab, configWithSheetId);
 
     const range = `${data.sheetTab}!A:A`;
 
-    // Normalize email to lowercase for consistent storage
-    const normalizedEmail = data.email.toLowerCase();
+    // Email is already lowercased by Zod schema validation
 
     await sheetsRequest(
       `/spreadsheets/${sheetId}/values/${encodeURIComponent(range)}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
       ValueRangeSchema,
-      config,
+      configWithSheetId,
       {
         method: "POST",
         headers: {
@@ -319,7 +321,7 @@ export async function appendSignup(
         body: JSON.stringify({
           values: [
             [
-              normalizedEmail,
+              data.email,
               data.timestamp,
               data.source || "api",
               data.name || "",
@@ -333,7 +335,7 @@ export async function appendSignup(
     );
 
     logger.info(
-      { email: normalizedEmail, sheetTab: data.sheetTab, sheetId },
+      { email: data.email, sheetTab: data.sheetTab, sheetId },
       "Successfully appended signup to sheet",
     );
   } catch (error) {
@@ -354,6 +356,9 @@ export async function emailExists(
     // If sheetTab is specified, only check that tab
     const tabsToCheck = sheetTab ? [sheetTab] : await getAllSheetTabs(config);
 
+    // Email is already lowercased by Zod schema validation
+    const normalizedEmail = email.toLowerCase();
+
     for (const tab of tabsToCheck) {
       const result = await sheetsRequest(
         `/spreadsheets/${config.googleSheetId}/values/${encodeURIComponent(`${tab}!A:A`)}`,
@@ -363,8 +368,9 @@ export async function emailExists(
 
       const rows = result.values || [];
       for (const row of rows) {
-        if (row[0]?.toLowerCase() === email.toLowerCase()) {
-          logger.info({ email, sheetTab: tab }, "Email already exists");
+        // Compare lowercase since stored emails are lowercase
+        if (row[0]?.toLowerCase() === normalizedEmail) {
+          logger.info({ email: normalizedEmail, sheetTab: tab }, "Email already exists");
           return true;
         }
       }

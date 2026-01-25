@@ -10,7 +10,7 @@
 
 import type { Elysia } from "elysia";
 import { logger } from "../utils/logger";
-import { getRequestStartTime, setRequestStartTime } from "../utils/request-state";
+import { getRequestStartTime } from "../utils/request-state";
 
 /**
  * Plugin that adds structured logging for requests and responses
@@ -44,7 +44,7 @@ import { getRequestStartTime, setRequestStartTime } from "../utils/request-state
 export const loggingPlugin = (app: Elysia) =>
   app
     .onRequest(({ request }) => {
-      setRequestStartTime(request, Date.now());
+      // Note: start time is set by metricsPlugin to avoid duplication
       logger.info(
         {
           method: request.method,

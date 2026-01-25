@@ -32,7 +32,7 @@ export const getEmbedScript = (apiBaseUrl: string): string => {
 
     const showName = options.showName !== false;
     const site = options.site || '';
-    const sheetTab = options.sheetTab || 'Sheet1';
+    const sheetTab = options.sheetTab || ''; // Empty = use server default
 
     const nameField = showName ? \`
       <input type="text" name="name" placeholder="Name (optional)" />
@@ -117,11 +117,13 @@ export const getEmbedScript = (apiBaseUrl: string): string => {
       form.appendChild(nameInput);
     }
 
-    const sheetTabInput = document.createElement('input');
-    sheetTabInput.type = 'hidden';
-    sheetTabInput.name = 'sheetTab';
-    sheetTabInput.value = sheetTab;
-    form.appendChild(sheetTabInput);
+    if (sheetTab) {
+      const sheetTabInput = document.createElement('input');
+      sheetTabInput.type = 'hidden';
+      sheetTabInput.name = 'sheetTab';
+      sheetTabInput.value = sheetTab;
+      form.appendChild(sheetTabInput);
+    }
 
     if (site) {
       const siteInput = document.createElement('input');
@@ -149,7 +151,7 @@ export const getEmbedScript = (apiBaseUrl: string): string => {
       const data = {
         email: formData.get('email'),
         name: formData.get('name') || undefined,
-        sheetTab: formData.get('sheetTab') || 'Sheet1',
+        sheetTab: formData.get('sheetTab') || undefined, // Let server use default
         site: formData.get('site') || undefined,
         source: 'embed',
         tags: ['web-form']

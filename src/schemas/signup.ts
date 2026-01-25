@@ -27,7 +27,7 @@ export const emailSchema = z
  */
 export const signupSchema = z.object({
   email: emailSchema,
-  sheetTab: z.string().min(1, "Sheet tab name is required").optional().default("Sheet1"),
+  sheetTab: z.string().min(1, "Sheet tab name is required").optional(), // Default comes from config.defaultSheetTab
   site: z.string().min(1, "Site name is required").optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
   turnstileToken: z.string().optional(),

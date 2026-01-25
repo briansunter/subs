@@ -25,23 +25,8 @@ jobs:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
 
-      - name: Create Release
-        if: ${{ steps.release.outputs.releases_created }}
-        uses: softprops/action-gh-release@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ steps.release.outputs.tag_name }}
-          name: ${{ steps.release.outputs.tag_name }}
-          body: ${{ steps.release.outputs.changelog }}
-
-      - name: Trigger Docker Build
-        if: ${{ steps.release.outputs.releases_created }}
+      - name: Log Release Info
+        if: ${{ steps.release.outputs.releases_created == 'true' }}
         run: |
           echo "Release created: ${{ steps.release.outputs.tag_name }}"
-          echo "Triggering Docker workflow via repository_dispatch"
-          curl -X POST \
-            -H "Accept: application/vnd.github.everest.v3+json" \
-            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-            https://api.github.com/repos/${{ github.repository }}/dispatches \
-            -d '{"event_type":"docker-build","client_payload":{"tag":"'${{ steps.release.outputs.tag_name }}'"}}'
+          echo "Docker build will be triggered by the v* tag push"

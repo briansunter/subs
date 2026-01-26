@@ -29,14 +29,14 @@ describe("Signup Schema Validation", () => {
       expect(result.success).toBe(false);
     });
 
-    test("should use default sheetTab when not provided", () => {
+    test("should leave sheetTab undefined when not provided (default applied at handler level)", () => {
       const result = signupSchema.safeParse({
         email: "test@example.com",
       });
 
       expect(result.success).toBe(true);
       if (result.success) {
-        expect(result.data.sheetTab).toBe("Sheet1");
+        expect(result.data.sheetTab).toBeUndefined();
       }
     });
 

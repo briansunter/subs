@@ -1,1 +1,4 @@
 bunx lint-staged
+
+# Run tests to catch failures before commit
+bun test

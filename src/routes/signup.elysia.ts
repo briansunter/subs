@@ -16,7 +16,7 @@ import { createApp } from "../app";
 import { bulkSignupSchema, extendedSignupSchema, signupSchema } from "../schemas/signup";
 import { register } from "../services/metrics";
 import { getEmbedScript } from "../static/embed-script";
-import { HTML_FORM_CONTENT } from "../static/html-form";
+import { getHtmlFormContent } from "../static/html-form";
 import { hasSetProperty, isObject } from "../utils/type-guards";
 import {
   createDefaultContext,
@@ -84,7 +84,7 @@ export const createSignupRoutes = (
       .get(
         "/",
         () =>
-          new Response(HTML_FORM_CONTENT, {
+          new Response(getHtmlFormContent(config), {
             headers: { "Content-Type": "text/html; charset=utf-8" },
           }),
       )

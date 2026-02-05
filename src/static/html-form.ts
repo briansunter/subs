@@ -353,7 +353,20 @@ export function getHtmlFormContent(config: SignupConfig): string {
 `;
 }
 
-// Backwards compatibility: export a default constant using default config
-// Note: This will use the config at module load time
-import { getConfig } from "../config";
-export const HTML_FORM_CONTENT = getHtmlFormContent(getConfig());
+// Backwards compatibility: export a default constant without reading env at module load time.
+const DEFAULT_HTML_FORM_CONFIG: SignupConfig = {
+  port: 3000,
+  host: "0.0.0.0",
+  googleSheetId: "",
+  googleCredentialsEmail: "",
+  googlePrivateKey: "",
+  defaultSheetTab: "Sheet1",
+  turnstileSecretKey: undefined,
+  turnstileSiteKey: undefined,
+  allowedOrigins: ["*"],
+  enableMetrics: true,
+  allowedSheets: new Map(),
+  sheetTabs: ["Sheet1"],
+};
+
+export const HTML_FORM_CONTENT = getHtmlFormContent(DEFAULT_HTML_FORM_CONFIG);

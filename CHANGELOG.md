@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.3](https://github.com/briansunter/subs/compare/subs-v0.1.2...subs-v0.1.3) (2026-02-05)
+
+
+### Bug Fixes
+
+* update sheetTab test and add tests to pre-commit hook ([5839f7a](https://github.com/briansunter/subs/commit/5839f7a2f6044ccff7c06d0b9e8e89de9cecd6c2))
+
 ## [0.1.2](https://github.com/briansunter/subs/compare/subs-v0.1.1...subs-v0.1.2) (2026-02-05)
 
 

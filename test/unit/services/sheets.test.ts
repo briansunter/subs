@@ -20,7 +20,6 @@ import { createMockResponse, getRequestBody } from "../../helpers/test-app-elysi
 // Mock jose functions before importing sheets service
 mock.module("jose", () => ({
   SignJWT: class MockSignJWT {
-    constructor(private payload: Record<string, unknown>) {}
     setProtectedHeader(_header: Record<string, string>) {
       return this;
     }
@@ -44,7 +43,12 @@ mock.module("jose", () => ({
 }));
 
 // Import the service functions
-import { appendSignup, emailExists, initializeSheetTab } from "../../../src/services/sheets";
+import {
+  appendSignup,
+  emailExists,
+  getSignupStats,
+  initializeSheetTab,
+} from "../../../src/services/sheets";
 
 // Test configuration
 const testConfig: SignupConfig = {
@@ -72,6 +76,12 @@ describe("Sheets Service - REST API Tests", () => {
   // Save original fetch
   const originalFetch = globalThis.fetch;
 
+  function setMockFetch(
+    implementation: (url: string | Request, options?: RequestInit) => Promise<Response>,
+  ): void {
+    globalThis.fetch = mock(implementation) as unknown as typeof fetch;
+  }
+
   beforeEach(() => {
     // Clear config cache to ensure clean environment
     clearConfigCache();
@@ -80,7 +90,7 @@ describe("Sheets Service - REST API Tests", () => {
     fetchCalls.length = 0;
 
     // Mock fetch
-    globalThis.fetch = mock(async (url: string | Request, options?: RequestInit) => {
+    setMockFetch(async (url: string | Request, options?: RequestInit) => {
       fetchCalls.push({
         url: url.toString(),
         options,
@@ -152,7 +162,7 @@ describe("Sheets Service - REST API Tests", () => {
   describe("initializeSheetTab", () => {
     test("should skip creation when sheet already exists", async () => {
       // Mock existing headers
-      globalThis.fetch = mock(async (url: string | Request, options?: RequestInit) => {
+      setMockFetch(async (url: string | Request, options?: RequestInit) => {
         fetchCalls.push({ url: url.toString(), options });
 
         const urlString = url.toString();
@@ -213,7 +223,7 @@ describe("Sheets Service - REST API Tests", () => {
     });
 
     test("should create new sheet when doesn't exist", async () => {
-      globalThis.fetch = mock(async (url: string | Request, options?: RequestInit) => {
+      setMockFetch(async (url: string | Request, options?: RequestInit) => {
         fetchCalls.push({ url: url.toString(), options });
 
         const urlString = url.toString();
@@ -285,7 +295,7 @@ describe("Sheets Service - REST API Tests", () => {
     });
 
     test("should add headers when sheet is empty", async () => {
-      globalThis.fetch = mock(async (url: string | Request, options?: RequestInit) => {
+      setMockFetch(async (url: string | Request, options?: RequestInit) => {
         fetchCalls.push({ url: url.toString(), options });
 
         const urlString = url.toString();
@@ -332,7 +342,7 @@ describe("Sheets Service - REST API Tests", () => {
     });
 
     test("should handle API errors gracefully", async () => {
-      globalThis.fetch = mock(async () => {
+      setMockFetch(async () => {
         return createMockResponse(500, { error: "Internal Server Error" });
       });
 
@@ -342,7 +352,7 @@ describe("Sheets Service - REST API Tests", () => {
 
   describe("appendSignup", () => {
     test("should append row with all fields", async () => {
-      globalThis.fetch = mock(async (url: string | Request, options?: RequestInit) => {
+      setMockFetch(async (url: string | Request, options?: RequestInit) => {
         fetchCalls.push({ url: url.toString(), options });
 
         const urlString = url.toString();
@@ -416,7 +426,7 @@ describe("Sheets Service - REST API Tests", () => {
     });
 
     test("should use default source when not provided", async () => {
-      globalThis.fetch = mock(async (url: string | Request, options?: RequestInit) => {
+      setMockFetch(async (url: string | Request, options?: RequestInit) => {
         fetchCalls.push({ url: url.toString(), options });
 
         const urlString = url.toString();
@@ -472,11 +482,11 @@ describe("Sheets Service - REST API Tests", () => {
       const appendCalls = fetchCalls.filter((c) => c.url.includes(":append"));
       const appendBody = getRequestBody(appendCalls[0]?.options);
       const values = appendBody["values"] as string[][];
-      expect(values[0][2]).toBe("api"); // Default source
+      expect(values[0]?.[2]).toBe("api"); // Default source
     });
 
     test("should handle empty tags array", async () => {
-      globalThis.fetch = mock(async (url: string | Request, options?: RequestInit) => {
+      setMockFetch(async (url: string | Request, options?: RequestInit) => {
         fetchCalls.push({ url: url.toString(), options });
 
         const urlString = url.toString();
@@ -532,11 +542,11 @@ describe("Sheets Service - REST API Tests", () => {
       const appendCalls = fetchCalls.filter((c) => c.url.includes(":append"));
       const appendBody = getRequestBody(appendCalls[0]?.options);
       const values = appendBody["values"] as string[][];
-      expect(values[0][4]).toBe(""); // Empty tags
+      expect(values[0]?.[4]).toBe(""); // Empty tags
     });
 
     test("should stringify metadata object", async () => {
-      globalThis.fetch = mock(async (url: string | Request, options?: RequestInit) => {
+      setMockFetch(async (url: string | Request, options?: RequestInit) => {
         fetchCalls.push({ url: url.toString(), options });
 
         const urlString = url.toString();
@@ -592,11 +602,11 @@ describe("Sheets Service - REST API Tests", () => {
       const appendCalls = fetchCalls.filter((c) => c.url.includes(":append"));
       const appendBody = getRequestBody(appendCalls[0]?.options);
       const values = appendBody["values"] as string[][];
-      expect(values[0][5]).toBe('{"key":"value"}');
+      expect(values[0]?.[5]).toBe('{"key":"value"}');
     });
 
     test("should handle empty metadata", async () => {
-      globalThis.fetch = mock(async (url: string | Request, options?: RequestInit) => {
+      setMockFetch(async (url: string | Request, options?: RequestInit) => {
         fetchCalls.push({ url: url.toString(), options });
 
         const urlString = url.toString();
@@ -651,11 +661,11 @@ describe("Sheets Service - REST API Tests", () => {
       const appendCalls = fetchCalls.filter((c) => c.url.includes(":append"));
       const appendBody = getRequestBody(appendCalls[0]?.options);
       const values = appendBody["values"] as string[][];
-      expect(values[0][5]).toBe(""); // Empty metadata
+      expect(values[0]?.[5]).toBe(""); // Empty metadata
     });
 
     test("should throw error on append failure", async () => {
-      globalThis.fetch = mock(async (url: string | Request, options?: RequestInit) => {
+      setMockFetch(async (url: string | Request, options?: RequestInit) => {
         fetchCalls.push({ url: url.toString(), options });
 
         const urlString = url.toString();
@@ -708,7 +718,7 @@ describe("Sheets Service - REST API Tests", () => {
 
   describe("emailExists", () => {
     test("should return true when email found in sheet", async () => {
-      globalThis.fetch = mock(async (url: string | Request, options?: RequestInit) => {
+      setMockFetch(async (url: string | Request, options?: RequestInit) => {
         fetchCalls.push({ url: url.toString(), options });
 
         const urlString = url.toString();
@@ -749,7 +759,7 @@ describe("Sheets Service - REST API Tests", () => {
     });
 
     test("should be case-insensitive when checking", async () => {
-      globalThis.fetch = mock(async (url: string | Request, options?: RequestInit) => {
+      setMockFetch(async (url: string | Request, options?: RequestInit) => {
         fetchCalls.push({ url: url.toString(), options });
 
         const urlString = url.toString();
@@ -790,7 +800,7 @@ describe("Sheets Service - REST API Tests", () => {
     });
 
     test("should return false when email not found", async () => {
-      globalThis.fetch = mock(async (url: string | Request, options?: RequestInit) => {
+      setMockFetch(async (url: string | Request, options?: RequestInit) => {
         fetchCalls.push({ url: url.toString(), options });
 
         const urlString = url.toString();
@@ -829,7 +839,7 @@ describe("Sheets Service - REST API Tests", () => {
 
     test("should search all tabs when sheetTab not provided", async () => {
       let callCount = 0;
-      globalThis.fetch = mock(async (url: string | Request, options?: RequestInit) => {
+      setMockFetch(async (url: string | Request, options?: RequestInit) => {
         fetchCalls.push({ url: url.toString(), options });
 
         const urlString = url.toString();
@@ -878,7 +888,7 @@ describe("Sheets Service - REST API Tests", () => {
     });
 
     test("should search specific tab when sheetTab provided", async () => {
-      globalThis.fetch = mock(async (url: string | Request, options?: RequestInit) => {
+      setMockFetch(async (url: string | Request, options?: RequestInit) => {
         fetchCalls.push({ url: url.toString(), options });
 
         const urlString = url.toString();
@@ -922,14 +932,229 @@ describe("Sheets Service - REST API Tests", () => {
       expect(valuesCalls[0]?.url).toContain("Sheet2");
     });
 
+    test("should return false without querying values when specific tab does not exist", async () => {
+      setMockFetch(async (url: string | Request, options?: RequestInit) => {
+        fetchCalls.push({ url: url.toString(), options });
+
+        const urlString = url.toString();
+
+        if (urlString.includes("oauth2.googleapis.com/token")) {
+          return createMockResponse(200, {
+            access_token: "mock-access-token",
+            expires_in: 3600,
+            token_type: "Bearer",
+          });
+        }
+
+        if (
+          urlString.includes("/spreadsheets/test-sheet-id") &&
+          !urlString.includes(":batchUpdate") &&
+          !urlString.includes("/values/")
+        ) {
+          return createMockResponse(200, {
+            sheets: [{ properties: { title: "Sheet1", sheetId: 1 } }],
+          });
+        }
+
+        return createMockResponse(404, { error: "Not found" });
+      });
+
+      const exists = await emailExists("test@example.com", "MissingTab", testConfig);
+
+      expect(exists).toBe(false);
+      const valuesCalls = fetchCalls.filter((c) => c.url.includes("/values/"));
+      expect(valuesCalls.length).toBe(0);
+    });
+
+    test("should handle tab names with spaces and apostrophes", async () => {
+      const specialTab = "Team's List";
+      setMockFetch(async (url: string | Request, options?: RequestInit) => {
+        fetchCalls.push({ url: url.toString(), options });
+
+        const urlString = url.toString();
+
+        if (urlString.includes("oauth2.googleapis.com/token")) {
+          return createMockResponse(200, {
+            access_token: "mock-access-token",
+            expires_in: 3600,
+            token_type: "Bearer",
+          });
+        }
+
+        if (
+          urlString.includes("/spreadsheets/test-sheet-id") &&
+          !urlString.includes(":batchUpdate") &&
+          !urlString.includes("/values/")
+        ) {
+          return createMockResponse(200, {
+            sheets: [{ properties: { title: specialTab, sheetId: 1 } }],
+          });
+        }
+
+        if (urlString.includes("/values/")) {
+          return createMockResponse(200, {
+            values: [["Email"], ["test@example.com"]],
+          });
+        }
+
+        return createMockResponse(404, { error: "Not found" });
+      });
+
+      const exists = await emailExists("test@example.com", specialTab, testConfig);
+
+      expect(exists).toBe(true);
+      const valuesCall = fetchCalls.find((c) => c.url.includes("/values/"));
+      expect(valuesCall?.url).toContain("'Team''s%20List'!A%3AA");
+    });
+
     test("should return false on API errors gracefully", async () => {
-      globalThis.fetch = mock(async () => {
+      setMockFetch(async () => {
         return createMockResponse(500, { error: "API Error" });
       });
 
       const exists = await emailExists("test@example.com", undefined, testConfig);
 
       expect(exists).toBe(false); // Should return false, not throw
+    });
+  });
+
+  describe("getSignupStats", () => {
+    test("should return empty stats when tab does not exist", async () => {
+      setMockFetch(async (url: string | Request, options?: RequestInit) => {
+        fetchCalls.push({ url: url.toString(), options });
+
+        const urlString = url.toString();
+
+        if (urlString.includes("oauth2.googleapis.com/token")) {
+          return createMockResponse(200, {
+            access_token: "mock-access-token",
+            expires_in: 3600,
+            token_type: "Bearer",
+          });
+        }
+
+        if (
+          urlString.includes("/spreadsheets/test-sheet-id") &&
+          !urlString.includes(":batchUpdate") &&
+          !urlString.includes("/values/")
+        ) {
+          return createMockResponse(200, {
+            sheets: [{ properties: { title: "Sheet1", sheetId: 1 } }],
+          });
+        }
+
+        return createMockResponse(404, { error: "Not found" });
+      });
+
+      const stats = await getSignupStats("MissingTab", testConfig);
+
+      expect(stats).toEqual({
+        total: 0,
+        sheetTab: "MissingTab",
+        lastSignup: null,
+      });
+
+      const valueCalls = fetchCalls.filter((c) => c.url.includes("/values/"));
+      expect(valueCalls.length).toBe(0);
+    });
+
+    test("should return total and latest signup timestamp for existing tab", async () => {
+      setMockFetch(async (url: string | Request, options?: RequestInit) => {
+        fetchCalls.push({ url: url.toString(), options });
+
+        const urlString = url.toString();
+
+        if (urlString.includes("oauth2.googleapis.com/token")) {
+          return createMockResponse(200, {
+            access_token: "mock-access-token",
+            expires_in: 3600,
+            token_type: "Bearer",
+          });
+        }
+
+        if (
+          urlString.includes("/spreadsheets/test-sheet-id") &&
+          !urlString.includes(":batchUpdate") &&
+          !urlString.includes("/values/")
+        ) {
+          return createMockResponse(200, {
+            sheets: [{ properties: { title: "Sheet1", sheetId: 1 } }],
+          });
+        }
+
+        if (urlString.includes("/values/Sheet1!A%3AB")) {
+          return createMockResponse(200, {
+            values: [
+              ["Email", "Timestamp"],
+              ["a@example.com", "2024-01-01T00:00:00.000Z"],
+              ["b@example.com", "2024-03-01T10:00:00.000Z"],
+            ],
+          });
+        }
+
+        return createMockResponse(404, { error: "Not found" });
+      });
+
+      const stats = await getSignupStats("Sheet1", testConfig);
+
+      expect(stats.total).toBe(2);
+      expect(stats.sheetTab).toBe("Sheet1");
+      expect(stats.lastSignup).toBe("2024-03-01T10:00:00.000Z");
+    });
+
+    test("should request stats with encoded range for tab names with spaces and apostrophes", async () => {
+      const specialTab = "Team's List";
+      setMockFetch(async (url: string | Request, options?: RequestInit) => {
+        fetchCalls.push({ url: url.toString(), options });
+
+        const urlString = url.toString();
+
+        if (urlString.includes("oauth2.googleapis.com/token")) {
+          return createMockResponse(200, {
+            access_token: "mock-access-token",
+            expires_in: 3600,
+            token_type: "Bearer",
+          });
+        }
+
+        if (
+          urlString.includes("/spreadsheets/test-sheet-id") &&
+          !urlString.includes(":batchUpdate") &&
+          !urlString.includes("/values/")
+        ) {
+          return createMockResponse(200, {
+            sheets: [{ properties: { title: specialTab, sheetId: 1 } }],
+          });
+        }
+
+        if (urlString.includes("/values/")) {
+          return createMockResponse(200, {
+            values: [
+              ["Email", "Timestamp"],
+              ["a@example.com", "2024-03-01T10:00:00.000Z"],
+            ],
+          });
+        }
+
+        return createMockResponse(404, { error: "Not found" });
+      });
+
+      const stats = await getSignupStats(specialTab, testConfig);
+
+      expect(stats.total).toBe(1);
+      expect(stats.sheetTab).toBe(specialTab);
+      const valuesCall = fetchCalls.find((c) => c.url.includes("/values/"));
+      expect(valuesCall?.url).toContain("'Team''s%20List'!A%3AB");
+    });
+
+    test("should throw when sheets API fails", async () => {
+      setMockFetch(async () => {
+        return createMockResponse(500, { error: "API Error" });
+      });
+
+      await expect(getSignupStats("Sheet1", testConfig)).rejects.toThrow(
+        "Failed to fetch signup stats",
+      );
     });
   });
 });

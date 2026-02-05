@@ -12,6 +12,7 @@
     "workers:secret": "wrangler secret put",
     "build": "bun build index.ts --outdir ./dist --target bun --minify",
     "lint": "bunx biome check .",
+    "typecheck": "bunx tsc --noEmit",
     "lint:fix": "bunx biome check --write .",
     "format": "bunx biome format --write .",
     "test": "bun test",

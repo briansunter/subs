@@ -2,6 +2,7 @@
  * Cloudflare Turnstile verification service
  */
 
+import { z } from "zod";
 import { createChildLogger } from "../utils/logger";
 
 const logger = createChildLogger("turnstile");
@@ -15,6 +16,13 @@ interface TurnstileSiteverifyResponse {
   hostname?: string;
   challenge_ts?: string;
 }
+
+const TurnstileSiteverifyResponseSchema = z.object({
+  success: z.boolean(),
+  "error-codes": z.array(z.string()).optional(),
+  hostname: z.string().optional(),
+  challenge_ts: z.string().optional(),
+});
 
 /**
  * Turnstile verification result interface
@@ -58,7 +66,8 @@ export async function verifyTurnstileToken(
       };
     }
 
-    const data: TurnstileSiteverifyResponse = await response.json();
+    const json = await response.json();
+    const data: TurnstileSiteverifyResponse = TurnstileSiteverifyResponseSchema.parse(json);
 
     if (data.success) {
       logger.info({ hostname: data.hostname }, "Turnstile token verified successfully");

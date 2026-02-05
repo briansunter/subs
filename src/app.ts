@@ -10,13 +10,11 @@
 
 import { cors } from "@elysiajs/cors";
 import { Elysia, type ElysiaConfig } from "elysia";
-import { getConfig } from "./config";
+import { getConfig, type SignupConfig } from "./config";
 import { loggingPlugin } from "./plugins/logging";
 import { metricsPlugin } from "./plugins/metrics";
 import { securityPlugin } from "./plugins/security";
 import { hasValueError, hasValueErrors } from "./utils/type-guards";
-
-const config = getConfig();
 
 /**
  * Extract validation error details from Elysia ValidationError
@@ -57,8 +55,11 @@ function extractValidationDetails(error: unknown): string[] {
  * - Error handling
  *
  * @param elysiaOptions - Optional Elysia configuration options (e.g., { adapter: CloudflareAdapter })
+ * @param appConfig - Optional pre-loaded config (used by route factories/tests)
  */
-export const createApp = (elysiaOptions?: Partial<ElysiaConfig<"">>) => {
+export const createApp = (elysiaOptions?: Partial<ElysiaConfig<"">>, appConfig?: SignupConfig) => {
+  const config = appConfig ?? getConfig();
+
   return (
     new Elysia(elysiaOptions || undefined)
       // CORS plugin

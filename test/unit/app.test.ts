@@ -8,10 +8,10 @@ import { clearConfigCache } from "../../src/config";
 
 beforeEach(() => {
   clearConfigCache();
-  process.env.GOOGLE_SHEET_ID = "test-sheet-id";
-  process.env.GOOGLE_CREDENTIALS_EMAIL = "test@test.com";
-  process.env.GOOGLE_PRIVATE_KEY = "test-key";
-  process.env.ALLOWED_ORIGINS = "https://example.com";
+  process.env["GOOGLE_SHEET_ID"] = "test-sheet-id";
+  process.env["GOOGLE_CREDENTIALS_EMAIL"] = "test@test.com";
+  process.env["GOOGLE_PRIVATE_KEY"] = "test-key";
+  process.env["ALLOWED_ORIGINS"] = "https://example.com";
 });
 
 afterEach(() => {
@@ -119,4 +119,22 @@ test("createApp with wildcard origin should work", async () => {
   const request = new Request("http://localhost/");
   const response = await app.handle(request);
   expect(response).toBeDefined();
+});
+
+test("createApp should pick up refreshed config after cache clear", async () => {
+  process.env["ALLOWED_ORIGINS"] = "https://first.example";
+  clearConfigCache();
+  const app1 = createApp();
+  const response1 = await app1.handle(
+    new Request("http://localhost/", { headers: { Origin: "https://first.example" } }),
+  );
+  expect(response1.headers.get("access-control-allow-origin")).toBe("https://first.example");
+
+  process.env["ALLOWED_ORIGINS"] = "https://second.example";
+  clearConfigCache();
+  const app2 = createApp();
+  const response2 = await app2.handle(
+    new Request("http://localhost/", { headers: { Origin: "https://second.example" } }),
+  );
+  expect(response2.headers.get("access-control-allow-origin")).toBe("https://second.example");
 });

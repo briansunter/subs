@@ -193,24 +193,46 @@ async function sheetsRequest<T extends z.ZodTypeAny>(
 }
 
 /**
+ * Format a sheet tab name for A1 notation ranges.
+ * Unquoted names are allowed for simple identifiers only.
+ */
+function formatSheetTabForRange(sheetTab: string): string {
+  if (/^[A-Za-z0-9_]+$/.test(sheetTab)) {
+    return sheetTab;
+  }
+
+  // Google Sheets escapes apostrophes in quoted tab names by doubling them.
+  return `'${sheetTab.replace(/'/g, "''")}'`;
+}
+
+function buildRange(sheetTab: string, columns: string): string {
+  return `${formatSheetTabForRange(sheetTab)}!${columns}`;
+}
+
+async function getSheetTabTitles(config: SignupConfig): Promise<string[]> {
+  const spreadsheet = await sheetsRequest(
+    `/spreadsheets/${config.googleSheetId}`,
+    SpreadsheetSchema,
+    config,
+  );
+
+  const titles: string[] = [];
+  for (const sheet of spreadsheet.sheets || []) {
+    const title = sheet.properties?.title;
+    if (title) {
+      titles.push(title);
+    }
+  }
+
+  return titles;
+}
+
+/**
  * Get all sheet tabs in the spreadsheet
  */
 async function getAllSheetTabs(config: SignupConfig): Promise<string[]> {
   try {
-    const spreadsheet = await sheetsRequest(
-      `/spreadsheets/${config.googleSheetId}`,
-      SpreadsheetSchema,
-      config,
-    );
-
-    const titles: string[] = [];
-    for (const sheet of spreadsheet.sheets || []) {
-      const title = sheet.properties?.title;
-      if (title) {
-        titles.push(title);
-      }
-    }
-    return titles;
+    return await getSheetTabTitles(config);
   } catch (error) {
     logger.error({ error }, "Failed to get sheet tabs");
     return [config.defaultSheetTab];
@@ -260,7 +282,7 @@ export async function initializeSheetTab(sheetTab: string, config: SignupConfig)
     }
 
     // Add headers if the sheet is empty
-    const range = `${sheetTab}!A1:G1`;
+    const range = buildRange(sheetTab, "A1:G1");
     const result = await sheetsRequest(
       `/spreadsheets/${config.googleSheetId}/values/${encodeURIComponent(range)}`,
       ValueRangeSchema,
@@ -305,7 +327,7 @@ export async function appendSignup(
     const configWithSheetId = { ...config, googleSheetId: sheetId };
     await initializeSheetTab(data.sheetTab, configWithSheetId);
 
-    const range = `${data.sheetTab}!A:A`;
+    const range = buildRange(data.sheetTab, "A:A");
 
     // Email is already lowercased by Zod schema validation
 
@@ -353,6 +375,13 @@ export async function emailExists(
   config: SignupConfig,
 ): Promise<boolean> {
   try {
+    if (sheetTab) {
+      const existingTabs = await getSheetTabTitles(config);
+      if (!existingTabs.includes(sheetTab)) {
+        return false;
+      }
+    }
+
     // If sheetTab is specified, only check that tab
     const tabsToCheck = sheetTab ? [sheetTab] : await getAllSheetTabs(config);
 
@@ -361,7 +390,7 @@ export async function emailExists(
 
     for (const tab of tabsToCheck) {
       const result = await sheetsRequest(
-        `/spreadsheets/${config.googleSheetId}/values/${encodeURIComponent(`${tab}!A:A`)}`,
+        `/spreadsheets/${config.googleSheetId}/values/${encodeURIComponent(buildRange(tab, "A:A"))}`,
         ValueRangeSchema,
         config,
       );
@@ -381,5 +410,56 @@ export async function emailExists(
     logger.error({ error, email }, "Failed to check if email exists");
     // Don't throw error here, just return false to allow signup
     return false;
+  }
+}
+
+export interface SignupStats {
+  total: number;
+  sheetTab: string;
+  lastSignup: string | null;
+}
+
+/**
+ * Get signup statistics for a specific tab
+ */
+export async function getSignupStats(sheetTab: string, config: SignupConfig): Promise<SignupStats> {
+  try {
+    // Missing tabs should return empty stats instead of surfacing a Sheets range parse error.
+    const existingTabs = await getSheetTabTitles(config);
+    if (!existingTabs.includes(sheetTab)) {
+      return {
+        total: 0,
+        sheetTab,
+        lastSignup: null,
+      };
+    }
+
+    const range = buildRange(sheetTab, "A:B");
+    const result = await sheetsRequest(
+      `/spreadsheets/${config.googleSheetId}/values/${encodeURIComponent(range)}`,
+      ValueRangeSchema,
+      config,
+    );
+
+    const rows = result.values || [];
+    // First row is header
+    const dataRows = rows.length > 1 ? rows.slice(1) : [];
+
+    let lastSignup: string | null = null;
+    for (const row of dataRows) {
+      const timestamp = row[1];
+      if (typeof timestamp === "string" && (!lastSignup || timestamp > lastSignup)) {
+        lastSignup = timestamp;
+      }
+    }
+
+    return {
+      total: dataRows.length,
+      sheetTab,
+      lastSignup,
+    };
+  } catch (error) {
+    logger.error({ error, sheetTab }, "Failed to get signup stats");
+    throw new Error("Failed to fetch signup stats");
   }
 }

@@ -10,10 +10,10 @@ import { isValidOrigin, securityPlugin } from "../../../src/plugins/security";
 beforeEach(() => {
   clearConfigCache();
   // Set test environment variables
-  process.env.GOOGLE_SHEET_ID = "test-sheet-id";
-  process.env.GOOGLE_CREDENTIALS_EMAIL = "test@test.com";
-  process.env.GOOGLE_PRIVATE_KEY = "test-key";
-  process.env.ALLOWED_ORIGINS = "https://example.com,https://test.com";
+  process.env["GOOGLE_SHEET_ID"] = "test-sheet-id";
+  process.env["GOOGLE_CREDENTIALS_EMAIL"] = "test@test.com";
+  process.env["GOOGLE_PRIVATE_KEY"] = "test-key";
+  process.env["ALLOWED_ORIGINS"] = "https://example.com,https://test.com";
 });
 
 test("securityPlugin should set CSP header", async () => {
@@ -44,7 +44,7 @@ test("securityPlugin should include valid origins in CSP", async () => {
 });
 
 test("securityPlugin should filter invalid origins from CSP", async () => {
-  process.env.ALLOWED_ORIGINS =
+  process.env["ALLOWED_ORIGINS"] =
     "https://example.com,evil.com;script-src 'unsafe-eval',https://test.com";
   clearConfigCache();
   const config = getConfig();
@@ -62,7 +62,7 @@ test("securityPlugin should filter invalid origins from CSP", async () => {
 });
 
 test("securityPlugin should handle wildcard origin", async () => {
-  process.env.ALLOWED_ORIGINS = "*";
+  process.env["ALLOWED_ORIGINS"] = "*";
   clearConfigCache();
   const config = getConfig();
   const app = new Elysia().use((app) => securityPlugin(app, config)).get("/", () => "Hello");
@@ -96,7 +96,7 @@ test("securityPlugin should set X-Content-Type-Options header", async () => {
 });
 
 test("isValidOrigin should validate origin format", async () => {
-  process.env.ALLOWED_ORIGINS = "https://example.com,http://localhost:3000,*,not-an-origin";
+  process.env["ALLOWED_ORIGINS"] = "https://example.com,http://localhost:3000,*,not-an-origin";
   clearConfigCache();
   const config = getConfig();
   const app = new Elysia().use((app) => securityPlugin(app, config)).get("/", () => "Hello");
@@ -113,7 +113,7 @@ test("isValidOrigin should validate origin format", async () => {
 });
 
 test("securityPlugin should handle empty allowed origins", async () => {
-  process.env.ALLOWED_ORIGINS = "";
+  process.env["ALLOWED_ORIGINS"] = "";
   clearConfigCache();
   const config = getConfig();
   const app = new Elysia().use((app) => securityPlugin(app, config)).get("/", () => "Hello");

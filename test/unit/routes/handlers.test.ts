@@ -9,6 +9,7 @@ import {
   handleExtendedSignup,
   handleHealthCheck,
   handleSignup,
+  handleStats,
   type SignupContext,
 } from "../../../src/routes/handlers";
 import { mockSheetsService } from "../../mocks/sheets";
@@ -58,6 +59,7 @@ describe("Route Handlers - Unit Tests", () => {
       sheets: {
         appendSignup: mockSheetsService.appendSignup,
         emailExists: mockSheetsService.emailExists,
+        getSignupStats: mockSheetsService.getSignupStats,
       },
       turnstile: {
         verifyTurnstileToken: mockTurnstileService.verifyTurnstileToken,
@@ -186,6 +188,31 @@ describe("Route Handlers - Unit Tests", () => {
 
       const sheetData = mockSheetsService.getSheetData("Sheet1");
       expect(sheetData[0]?.email).toBe("test5@example.com");
+    });
+
+    test("should check duplicates against resolved site sheet", async () => {
+      const checkedSheetIds: string[] = [];
+      const siteContext: SignupContext = {
+        ...mockContext,
+        config: {
+          ...mockContext.config,
+          googleSheetId: "default-sheet",
+          allowedSheets: new Map([["siteA", "siteA-sheet-id"]]),
+        },
+        sheets: {
+          ...mockContext.sheets,
+          emailExists: async (_email, _sheetTab, config) => {
+            checkedSheetIds.push(config.googleSheetId);
+            return false;
+          },
+          appendSignup: async () => {},
+        },
+      };
+
+      const result = await handleSignup({ email: "site@example.com", site: "siteA" }, siteContext);
+
+      expect(result.success).toBe(true);
+      expect(checkedSheetIds).toEqual(["siteA-sheet-id"]);
     });
   });
 
@@ -368,6 +395,34 @@ describe("Route Handlers - Unit Tests", () => {
 
       expect(result.success).toBe(false);
       expect(result.statusCode).toBe(400);
+    });
+
+    test("should check duplicates against each signup site sheet", async () => {
+      const checkedSheetIds: string[] = [];
+      const siteContext: SignupContext = {
+        ...mockContext,
+        config: {
+          ...mockContext.config,
+          googleSheetId: "default-sheet",
+          allowedSheets: new Map([["siteA", "siteA-sheet-id"]]),
+        },
+        sheets: {
+          ...mockContext.sheets,
+          emailExists: async (_email, _sheetTab, config) => {
+            checkedSheetIds.push(config.googleSheetId);
+            return false;
+          },
+          appendSignup: async () => {},
+        },
+      };
+
+      const result = await handleBulkSignup(
+        { signups: [{ email: "bulk@example.com", site: "siteA" }] },
+        siteContext,
+      );
+
+      expect(result.success).toBe(true);
+      expect(checkedSheetIds).toEqual(["siteA-sheet-id"]);
     });
   });
 
@@ -633,6 +688,28 @@ describe("Route Handlers - Unit Tests", () => {
 
       const sheetData = mockSheetsService.getSheetData("MyCustomSheet");
       expect(sheetData).toHaveLength(1);
+    });
+  });
+
+  describe("handleStats", () => {
+    test("should return stats for a valid sheet tab", async () => {
+      await handleSignup({ email: "stats@example.com", sheetTab: "Sheet1" }, mockContext);
+
+      const result = await handleStats("Sheet1", mockContext);
+
+      expect(result.success).toBe(true);
+      expect(result.statusCode).toBe(200);
+      const data = result.data as { total: number; sheetTab: string; lastSignup: string | null };
+      expect(data.total).toBe(1);
+      expect(data.sheetTab).toBe("Sheet1");
+    });
+
+    test("should validate sheetTab is required", async () => {
+      const result = await handleStats(undefined, mockContext);
+
+      expect(result.success).toBe(false);
+      expect(result.statusCode).toBe(400);
+      expect(result.error).toBe("Validation failed");
     });
   });
 });

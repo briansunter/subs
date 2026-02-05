@@ -29,6 +29,7 @@ beforeEach(() => {
     sheets: {
       appendSignup: mockSheetsService.appendSignup,
       emailExists: mockSheetsService.emailExists,
+      getSignupStats: mockSheetsService.getSignupStats,
     },
     turnstile: {
       verifyTurnstileToken: mockTurnstileService.verifyTurnstileToken,
@@ -83,6 +84,19 @@ describe("Route Configuration", () => {
     expect(body.status).toBe("ok");
   });
 
+  test("should return stats at /api/stats", async () => {
+    const app = createSignupRoutes(mockContext);
+    const response = await app.handle(new Request("http://localhost/api/stats?sheetTab=Sheet1"));
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as {
+      success: boolean;
+      data: { total: number; sheetTab: string };
+    };
+    expect(body.success).toBe(true);
+    expect(body.data.sheetTab).toBe("Sheet1");
+  });
+
   test("should return config at /api/config", async () => {
     const app = createSignupRoutes(mockContext);
     const response = await app.handle(new Request("http://localhost/api/config"));
@@ -118,10 +132,36 @@ describe("Feature Guards", () => {
       expect(body.error).toBe("Not found");
     });
 
+    test("should return 404 at root metrics when metrics are disabled", async () => {
+      const disabledContext: SignupContext = {
+        ...mockContext,
+        config: {
+          ...mockContext.config,
+          enableMetrics: false,
+        },
+      };
+      const app = createSignupRoutes(disabledContext);
+
+      const response = await app.handle(new Request("http://localhost/metrics"));
+
+      expect(response.status).toBe(404);
+      const body = (await response.json()) as { error: string };
+      expect(body.error).toBe("Not found");
+    });
+
     test("should return metrics when enabled", async () => {
       const app = createSignupRoutes(mockContext);
 
       const response = await app.handle(new Request("http://localhost/api/metrics"));
+
+      expect(response.status).toBe(200);
+      expect(response.headers.get("Content-Type")).toContain("text/plain");
+    });
+
+    test("should return root metrics when enabled", async () => {
+      const app = createSignupRoutes(mockContext);
+
+      const response = await app.handle(new Request("http://localhost/metrics"));
 
       expect(response.status).toBe(200);
       expect(response.headers.get("Content-Type")).toContain("text/plain");
@@ -182,6 +222,13 @@ describe("Content Type Headers", () => {
 
     expect(response.headers.get("Content-Type")).toContain("text/plain");
   });
+
+  test("should return text/plain content type for root metrics", async () => {
+    const app = createSignupRoutes(mockContext);
+    const response = await app.handle(new Request("http://localhost/metrics"));
+
+    expect(response.headers.get("Content-Type")).toContain("text/plain");
+  });
 });
 
 describe("Validation", () => {
@@ -215,6 +262,16 @@ describe("Validation", () => {
     expect(response.status).toBe(400);
     const body = (await response.json()) as { success: boolean; error: string };
     expect(body.success).toBe(false);
+  });
+
+  test("should return 400 for missing stats sheetTab", async () => {
+    const app = createSignupRoutes(mockContext);
+    const response = await app.handle(new Request("http://localhost/api/stats"));
+
+    expect(response.status).toBe(400);
+    const body = (await response.json()) as { success: boolean; error: string };
+    expect(body.success).toBe(false);
+    expect(body.error).toBe("Validation failed");
   });
 });
 

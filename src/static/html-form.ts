@@ -215,6 +215,14 @@ export function getHtmlFormContent(config: SignupConfig): string {
     const apiEndpoint = urlParams.get('api') || '/api/signup/extended';
     const redirectUrl = urlParams.get('redirect');
     const site = urlParams.get('site');
+    const initialSheetTab = urlParams.get('sheetTab');
+
+    if (initialSheetTab) {
+      const sheetTabSelect = document.getElementById('sheetTab');
+      if (sheetTabSelect && Array.from(sheetTabSelect.options).some(opt => opt.value === initialSheetTab)) {
+        sheetTabSelect.value = initialSheetTab;
+      }
+    }
 
     // Validated parent origin for postMessage (set when receiving messages)
     let validatedParentOrigin = null;

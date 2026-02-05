@@ -126,4 +126,17 @@ export const mockSheetsService = {
 
     return false;
   },
+
+  getSignupStats: async (sheetTab: string, _config: unknown) => {
+    if (mockAuthError) throw mockAuthError;
+
+    const rows = mockSheetData.get(sheetTab) || [];
+    const lastRow = rows[rows.length - 1];
+
+    return {
+      total: rows.length,
+      sheetTab,
+      lastSignup: lastRow?.timestamp ?? null,
+    };
+  },
 };

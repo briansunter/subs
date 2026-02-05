@@ -37,6 +37,7 @@ export async function getTestApp(overrides?: Partial<SignupContext>) {
     sheets: {
       appendSignup: mockSheetsService.appendSignup,
       emailExists: mockSheetsService.emailExists,
+      getSignupStats: mockSheetsService.getSignupStats,
     },
     turnstile: {
       verifyTurnstileToken: mockTurnstileService.verifyTurnstileToken,

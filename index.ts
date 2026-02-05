@@ -11,7 +11,10 @@ const config = getConfig();
 const app = createSignupRoutes();
 
 // Start server
-app.listen(config.port);
+app.listen({
+  port: config.port,
+  hostname: config.host,
+});
 
 logger.info(`Server listening on ${config.host}:${config.port}`);
 logger.info(`Embed script: http://${config.host}:${config.port}/embed.js`);

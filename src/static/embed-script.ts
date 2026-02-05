@@ -12,6 +12,10 @@ export const getEmbedScript = (apiBaseUrl: string): string => {
    * @property {string} [site] - Site name that maps to a specific Google Sheet
    * @property {string} [sheetTab] - Which tab in the sheet (default: first available)
    * @property {boolean} [showName] - Show name field (default: true)
+   * @property {string} [redirect] - Redirect URL after successful signup (iframe mode)
+   * @property {string} [api] - Custom API endpoint for iframe mode
+   * @property {string|number} [width] - Iframe width (iframe mode)
+   * @property {string|number} [height] - Iframe height (iframe mode)
    */
 
   /**
@@ -196,13 +200,59 @@ export const getEmbedScript = (apiBaseUrl: string): string => {
     return form;
   }
 
+  /**
+   * Alias for create() to match docs and legacy usage
+   */
+  function inline(target, options) {
+    return create(target, options);
+  }
+
+  /**
+   * Create an iframe embed that hosts the built-in form page
+   */
+  function iframe(target, options) {
+    options = options || {};
+    const container = typeof target === 'string'
+      ? document.querySelector(target)
+      : target;
+
+    if (!container) {
+      console.error('SignupEmbed: target not found');
+      return;
+    }
+
+    const params = new URLSearchParams();
+    if (options.api) params.set('api', options.api);
+    if (options.redirect) params.set('redirect', options.redirect);
+    if (options.site) params.set('site', options.site);
+    if (options.sheetTab) params.set('sheetTab', options.sheetTab);
+
+    const src = '${apiBaseUrl}/' + (params.toString() ? ('?' + params.toString()) : '');
+
+    const frame = document.createElement('iframe');
+    frame.src = src;
+    frame.width = String(options.width || '100%');
+    frame.height = String(options.height || 520);
+    frame.style.border = '0';
+    frame.style.maxWidth = '100%';
+    frame.loading = 'lazy';
+    frame.referrerPolicy = 'strict-origin-when-cross-origin';
+    frame.setAttribute('title', 'Signup form');
+
+    container.appendChild(frame);
+    return frame;
+  }
+
   // Expose SignupEmbed globally
   window.SignupEmbed = {
-    create: create
+    create: create,
+    inline: inline,
+    iframe: iframe
   };
 
   console.log('SignupEmbed loaded. Use SignupEmbed.create(selector, options)');
-  console.log('Options: { site: string, sheetTab: string, showName: boolean }');
+  console.log('Also available: SignupEmbed.inline(selector, options), SignupEmbed.iframe(selector, options)');
+  console.log('Options: { site: string, sheetTab: string, showName: boolean, redirect: string, api: string }');
 })();
   `;
 };

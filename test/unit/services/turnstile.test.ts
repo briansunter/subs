@@ -90,8 +90,8 @@ describe("Turnstile Service - Unit Tests", () => {
       });
 
       const body = getRequestBody(fetchCalls[0]?.options);
-      expect(body.secret).toBe(mockSecret);
-      expect(body.response).toBe(mockToken);
+      expect(body["secret"]).toBe(mockSecret);
+      expect(body["response"]).toBe(mockToken);
     });
 
     test("should handle successful verification without hostname", async () => {
@@ -405,7 +405,7 @@ describe("Turnstile Service - Unit Tests", () => {
 
       const fetchCalls = getFetchCalls();
       const body = getRequestBody(fetchCalls[0]?.options);
-      expect(body.response).toBe(specialToken);
+      expect(body["response"]).toBe(specialToken);
     });
 
     test("should handle empty secret key", async () => {

@@ -18,7 +18,7 @@ import {
   recordSignup,
   recordTurnstileVerification,
 } from "../services/metrics";
-import { appendSignup, emailExists } from "../services/sheets";
+import { appendSignup, emailExists, getSignupStats } from "../services/sheets";
 import { verifyTurnstileToken } from "../services/turnstile";
 import { createChildLogger } from "../utils/logger";
 
@@ -32,6 +32,7 @@ export interface SignupContext {
   sheets: {
     appendSignup: typeof appendSignup;
     emailExists: typeof emailExists;
+    getSignupStats: typeof getSignupStats;
   };
   turnstile: {
     verifyTurnstileToken: typeof verifyTurnstileToken;
@@ -75,7 +76,7 @@ function resolveSiteToSheetId(
 export function createDefaultContext(): SignupContext {
   const currentConfig = getConfig();
   return {
-    sheets: { appendSignup, emailExists },
+    sheets: { appendSignup, emailExists, getSignupStats },
     turnstile: { verifyTurnstileToken },
     config: currentConfig,
   };
@@ -192,7 +193,12 @@ interface SignupData {
  * @param logMessage - Log message for successful signup
  */
 async function processSignupRequest<
-  T extends { email: string; sheetTab?: string; turnstileToken?: string },
+  T extends {
+    email: string;
+    sheetTab?: string;
+    turnstileToken?: string;
+    resolvedSheetId?: string;
+  },
 >(
   data: T,
   ctx: SignupContext,
@@ -212,8 +218,11 @@ async function processSignupRequest<
     // Check if email already exists
     const sheetsStartTime = Date.now();
     let exists = false;
+    const resolvedConfig = data.resolvedSheetId
+      ? { ...ctx.config, googleSheetId: data.resolvedSheetId }
+      : ctx.config;
     try {
-      exists = await ctx.sheets.emailExists(data.email, data.sheetTab, ctx.config);
+      exists = await ctx.sheets.emailExists(data.email, data.sheetTab, resolvedConfig);
       recordSheetsRequest("emailExists", true, (Date.now() - sheetsStartTime) / 1000);
     } catch (error) {
       recordSheetsRequest("emailExists", false, (Date.now() - sheetsStartTime) / 1000);
@@ -231,7 +240,7 @@ async function processSignupRequest<
     // Store in Google Sheets
     const appendStartTime = Date.now();
     try {
-      await ctx.sheets.appendSignup(buildSignupData(data), ctx.config);
+      await ctx.sheets.appendSignup(buildSignupData(data), resolvedConfig);
       recordSheetsRequest("appendSignup", true, (Date.now() - appendStartTime) / 1000);
     } catch (error) {
       recordSheetsRequest("appendSignup", false, (Date.now() - appendStartTime) / 1000);
@@ -371,7 +380,8 @@ export async function handleBulkSignup(
 
         // Check if email already exists
         const sheetsStartTime = Date.now();
-        const exists = await ctx.sheets.emailExists(signup.email, signup.sheetTab, ctx.config);
+        const resolvedConfig = { ...ctx.config, googleSheetId: siteResolution.sheetId };
+        const exists = await ctx.sheets.emailExists(signup.email, signup.sheetTab, resolvedConfig);
         recordSheetsRequest("emailExists", true, (Date.now() - sheetsStartTime) / 1000);
 
         if (exists) {
@@ -389,7 +399,7 @@ export async function handleBulkSignup(
             sheetId: siteResolution.sheetId,
             metadata: signup.metadata ? JSON.stringify(signup.metadata) : undefined,
           },
-          ctx.config,
+          resolvedConfig,
         );
         recordSheetsRequest("appendSignup", true, (Date.now() - appendStartTime) / 1000);
 
@@ -443,4 +453,40 @@ export function handleHealthCheck(): HandlerResult {
       timestamp: new Date().toISOString(),
     },
   };
+}
+
+/**
+ * Handle stats query for a sheet tab
+ */
+export async function handleStats(
+  sheetTab: string | undefined,
+  ctx: SignupContext,
+): Promise<HandlerResult> {
+  if (!sheetTab || !sheetTab.trim()) {
+    return {
+      success: false,
+      statusCode: 400,
+      error: "Validation failed",
+      details: ["sheetTab: Sheet tab is required"],
+    };
+  }
+
+  const startTime = Date.now();
+  try {
+    const stats = await ctx.sheets.getSignupStats(sheetTab.trim(), ctx.config);
+    recordSheetsRequest("getSignupStats", true, (Date.now() - startTime) / 1000);
+    return {
+      success: true,
+      statusCode: 200,
+      data: stats,
+    };
+  } catch (error) {
+    logger.error({ error, sheetTab }, "Failed to get stats");
+    recordSheetsRequest("getSignupStats", false, (Date.now() - startTime) / 1000);
+    return {
+      success: false,
+      statusCode: 500,
+      error: "Internal server error",
+    };
+  }
 }

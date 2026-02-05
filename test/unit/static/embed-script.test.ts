@@ -24,6 +24,8 @@ test("getEmbedScript should expose SignupEmbed.create", () => {
   expect(script).toContain("window.SignupEmbed");
   expect(script).toContain("SignupEmbed");
   expect(script).toContain("create: create");
+  expect(script).toContain("inline: inline");
+  expect(script).toContain("iframe: iframe");
 });
 
 test("getEmbedScript should create inline form function", () => {
@@ -57,6 +59,8 @@ test("getEmbedScript should support configuration options", () => {
   expect(script).toContain("options.site");
   expect(script).toContain("options.sheetTab");
   expect(script).toContain("options.showName");
+  expect(script).toContain("options.redirect");
+  expect(script).toContain("options.api");
 });
 
 test("getEmbedScript should include inline form styles", () => {

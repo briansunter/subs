@@ -24,6 +24,7 @@ import {
   handleExtendedSignup,
   handleHealthCheck,
   handleSignup,
+  handleStats,
   type SignupContext,
 } from "./handlers";
 
@@ -70,9 +71,14 @@ export const createSignupRoutes = (
 ) => {
   const ctx = context ?? createDefaultContext();
   const config = ctx.config;
+  const metricsRouteOptions = {
+    beforeHandle: createFeatureGuard(config.enableMetrics),
+  };
+  const metricsHandler = async () =>
+    new Response(await register.metrics(), { headers: { "Content-Type": "text/plain" } });
 
   return (
-    createApp(elysiaOptions)
+    createApp(elysiaOptions, config)
       .derive(() => ({ context: ctx }))
       // HTML form
       .get(
@@ -90,10 +96,20 @@ export const createSignupRoutes = (
           headers: { "Content-Type": "application/javascript; charset=utf-8" },
         });
       })
+      // Root metrics endpoint (for Prometheus defaults)
+      .get("/metrics", metricsHandler, metricsRouteOptions)
       .group("/api", (app) =>
         app
           // Health check
           .get("/health", () => handleHealthCheck().data)
+          // Stats endpoint
+          .get("/stats", async ({ request, context, set }) => {
+            const url = new URL(request.url);
+            const sheetTab = url.searchParams.get("sheetTab") ?? undefined;
+            const result = await handleStats(sheetTab, context);
+            if (result.statusCode) set.status = result.statusCode;
+            return result;
+          })
           // Config endpoint
           .get("/config", () => ({
             turnstileSiteKey: config.turnstileSiteKey ?? null,
@@ -102,14 +118,7 @@ export const createSignupRoutes = (
             sheetTabs: config.sheetTabs,
           }))
           // Metrics endpoint (conditional on feature flag)
-          .get(
-            "/metrics",
-            async () =>
-              new Response(await register.metrics(), { headers: { "Content-Type": "text/plain" } }),
-            {
-              beforeHandle: createFeatureGuard(config.enableMetrics),
-            },
-          )
+          .get("/metrics", metricsHandler, metricsRouteOptions)
           // Basic signup
           .post(
             "/signup",

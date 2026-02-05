@@ -8,10 +8,10 @@ import worker, { type WorkerApp } from "../../src/index.worker";
 
 beforeEach(() => {
   clearConfigCache();
-  process.env.GOOGLE_SHEET_ID = "test-sheet-id";
-  process.env.GOOGLE_CREDENTIALS_EMAIL = "test@test.com";
-  process.env.GOOGLE_PRIVATE_KEY = "test-key";
-  process.env.ALLOWED_ORIGINS = "https://example.com";
+  process.env["GOOGLE_SHEET_ID"] = "test-sheet-id";
+  process.env["GOOGLE_CREDENTIALS_EMAIL"] = "test@test.com";
+  process.env["GOOGLE_PRIVATE_KEY"] = "test-key";
+  process.env["ALLOWED_ORIGINS"] = "https://example.com";
 });
 
 test("worker should export a default object", () => {

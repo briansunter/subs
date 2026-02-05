@@ -8,10 +8,10 @@ import { HTML_FORM_CONTENT } from "../../../src/static/html-form";
 
 beforeEach(() => {
   clearConfigCache();
-  process.env.GOOGLE_SHEET_ID = "test-sheet-id";
-  process.env.GOOGLE_CREDENTIALS_EMAIL = "test@test.com";
-  process.env.GOOGLE_PRIVATE_KEY = "test-key";
-  process.env.ALLOWED_ORIGINS = "https://example.com";
+  process.env["GOOGLE_SHEET_ID"] = "test-sheet-id";
+  process.env["GOOGLE_CREDENTIALS_EMAIL"] = "test@test.com";
+  process.env["GOOGLE_PRIVATE_KEY"] = "test-key";
+  process.env["ALLOWED_ORIGINS"] = "https://example.com";
 });
 
 test("HTML_FORM_CONTENT should be a valid HTML string", () => {

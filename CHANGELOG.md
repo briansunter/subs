@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.1](https://github.com/briansunter/subs/compare/subs-v0.1.0...subs-v0.1.1) (2026-02-05)
+
+
+### Bug Fixes
+
+* match subs-v* tags in Docker workflow ([6c9d394](https://github.com/briansunter/subs/commit/6c9d394459a9fe9ef3917517d16360dca2a95876))
+* set NODE_ENV=production at build time for pino-pretty exclusion ([cd1892e](https://github.com/briansunter/subs/commit/cd1892eb5facb956aad1139287d007b69429fed1))
+* update sheetTab test and add tests to pre-commit hook ([5839f7a](https://github.com/briansunter/subs/commit/5839f7a2f6044ccff7c06d0b9e8e89de9cecd6c2))
+* use server DEFAULT_SHEET_TAB instead of hardcoded Sheet1 ([5ed0bcc](https://github.com/briansunter/subs/commit/5ed0bcc49b133bd7e3fa606bdf235f9ff88b13a3))
+
 ## 0.1.0 (2026-01-25)
 
 

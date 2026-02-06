@@ -8,6 +8,7 @@ on:
   workflow_dispatch:
 
 permissions:
+  actions: write
   contents: write
   pull-requests: write
 
@@ -25,8 +26,20 @@ jobs:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
 
-      - name: Log Release Info
+      - name: Trigger Docker Build
         if: ${{ steps.release.outputs.releases_created == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag_name }}
         run: |
-          echo "Release created: ${{ steps.release.outputs.tag_name }}"
-          echo "Docker build will be triggered by the v* tag push"
+          echo "Release created: ${RELEASE_TAG}"
+          # Tag refs from actions can be eventually consistent; wait until ref is resolvable.
+          for i in {1..10}; do
+            if gh api "repos/${{ github.repository }}/git/ref/tags/${RELEASE_TAG}" >/dev/null 2>&1; then
+              break
+            fi
+            sleep 2
+          done
+
+          gh workflow run docker-build.yml --ref "${RELEASE_TAG}" -f tag="${RELEASE_TAG}"
+          echo "Triggered Docker Build & Push for ${RELEASE_TAG}"

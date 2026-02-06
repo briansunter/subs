@@ -27,8 +27,6 @@ compatibility_flags = ["nodejs_compat"]
 # - CLOUDFLARE_TURNSTILE_SITE_KEY
 # - ALLOWED_ORIGINS (defaults to *)
 # - DEFAULT_SHEET_TAB (defaults to "Sheet1")
-# - ENABLE_EXTENDED_SIGNUP (defaults to "true")
-# - ENABLE_BULK_SIGNUP (defaults to "true")
 # - ENABLE_METRICS (defaults to "true")
 # - LOG_LEVEL (defaults to "info")
 

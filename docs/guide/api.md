@@ -1,58 +1,34 @@
 # API Reference
 
-Complete reference for all API endpoints.
-
 ## Base URL
 
 ```
-http://localhost:3000  # Development
-https://your-domain.com  # Production
-```
-
-## Authentication
-
-The API does not require authentication for signup operations. To secure your API:
-
-1. **Use CORS** - Set `ALLOWED_ORIGINS` to specific domains
-2. **Add Rate Limiting** - Implement a rate limiter in production
-3. **Use HTTPS** - Always use HTTPS in production
-4. **Add API Key** - Implement API key authentication if needed
-
-## Response Format
-
-### Success Response
-
-```json
-{
-  "success": true,
-  "message": "Operation completed successfully",
-  "data": {
-    // Response data
-  }
-}
-```
-
-### Error Response
-
-```json
-{
-  "success": false,
-  "error": "Error type",
-  "message": "Human-readable error message",
-  "details": {
-    // Additional error details
-  }
-}
+http://localhost:3000          # Development
+https://your-domain.com        # Production
 ```
 
 ## Endpoints
 
-### POST `/api/signup`
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/api/signup` | Email signup |
+| `POST` | `/api/signup/extended` | Signup with name, source, tags |
+| `POST` | `/api/signup/bulk` | Bulk signup (up to 100) |
+| `POST` | `/api/signup/form` | HTML form submission |
+| `GET` | `/api/stats` | Signup statistics |
+| `GET` | `/api/health` | Health check |
+| `GET` | `/api/config` | Public configuration |
+| `GET` | `/metrics` | Prometheus metrics |
+| `GET` | `/` | Built-in HTML signup form |
+| `GET` | `/embed.js` | Embeddable JavaScript widget |
 
-Basic email signup with email-only validation.
+---
 
-#### Request
+## POST `/api/signup`
 
+Basic email signup.
+
+**Request**:
 ```json
 {
   "email": "user@example.com",
@@ -60,74 +36,55 @@ Basic email signup with email-only validation.
 }
 ```
 
-#### Request Body
-
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `email` | string | Yes | Valid email address |
 | `sheetTab` | string | No | Target sheet tab (default: `DEFAULT_SHEET_TAB`) |
-
-#### Response
+| `site` | string | No | Site name for multi-site support |
+| `metadata` | object | No | Arbitrary key-value metadata |
+| `turnstileToken` | string | No | Required if Turnstile is configured |
 
 **Success (200)**:
-
 ```json
 {
   "success": true,
-  "message": "Signup added successfully",
-  "data": {
-    "email": "user@example.com",
-    "timestamp": "2025-01-12T10:30:00.000Z",
-    "sheetTab": "Sheet1"
-  }
+  "message": "Successfully signed up!"
 }
 ```
 
-**Error (400)** - Invalid email:
-
-```json
-{
-  "success": false,
-  "error": "Validation error",
-  "message": "email: Invalid email address",
-  "details": {
-    "email": "Invalid email address"
-  }
-}
-```
-
-**Error (409)** - Duplicate email:
-
+**Duplicate (409)**:
 ```json
 {
   "success": false,
   "error": "Duplicate email",
   "message": "This email is already signed up",
-  "details": {
-    "email": "user@example.com"
-  }
+  "details": {"email": "user@example.com"}
 }
 ```
 
-#### Example
+**Validation error (400)**:
+```json
+{
+  "success": false,
+  "error": "Validation error",
+  "message": "email: Invalid email address",
+  "details": {"email": "Invalid email address"}
+}
+```
 
 ```bash
 curl -X POST http://localhost:3000/api/signup \
   -H "Content-Type: application/json" \
-  -d '{
-    "email": "user@example.com",
-    "sheetTab": "Sheet1"
-  }'
+  -d '{"email": "user@example.com", "sheetTab": "Sheet1"}'
 ```
 
 ---
 
-### POST `/api/signup/extended`
+## POST `/api/signup/extended`
 
-Extended signup with additional fields.
+Signup with additional fields.
 
-#### Request
-
+**Request**:
 ```json
 {
   "email": "user@example.com",
@@ -138,157 +95,109 @@ Extended signup with additional fields.
 }
 ```
 
-#### Request Body
-
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `email` | string | Yes | Valid email address |
 | `name` | string | No | User's name |
-| `source` | string | No | Signup source (e.g., "website", "referral") |
-| `tags` | string[] | No | Array of tags |
+| `source` | string | No | Signup source (default: `"api"`) |
+| `tags` | string[] | No | Tags (default: `[]`, max 50) |
 | `sheetTab` | string | No | Target sheet tab |
-
-#### Response
+| `site` | string | No | Site name for multi-site support |
+| `metadata` | object | No | Arbitrary key-value metadata |
+| `turnstileToken` | string | No | Required if Turnstile is configured |
 
 **Success (200)**:
-
 ```json
 {
   "success": true,
-  "message": "Signup added successfully",
-  "data": {
-    "email": "user@example.com",
-    "name": "John Doe",
-    "source": "website",
-    "tags": ["newsletter", "beta"],
-    "timestamp": "2025-01-12T10:30:00.000Z",
-    "sheetTab": "Newsletter"
-  }
+  "message": "Successfully signed up!"
 }
 ```
-
-#### Example
 
 ```bash
 curl -X POST http://localhost:3000/api/signup/extended \
   -H "Content-Type: application/json" \
-  -d '{
-    "email": "user@example.com",
-    "name": "John Doe",
-    "source": "website",
-    "tags": ["newsletter", "beta"],
-    "sheetTab": "Newsletter"
-  }'
+  -d '{"email": "user@example.com", "name": "John Doe", "source": "website", "tags": ["newsletter"], "sheetTab": "Newsletter"}'
 ```
 
 ---
 
-### POST `/api/signup/bulk`
+## POST `/api/signup/bulk`
 
-Bulk signup for multiple emails (up to 100).
+Bulk signup for multiple emails (1-100 per request).
 
-#### Request
-
+**Request**:
 ```json
 {
   "signups": [
     {"email": "user1@example.com"},
-    {"email": "user2@example.com"},
-    {"email": "user3@example.com"}
+    {"email": "user2@example.com"}
   ],
   "sheetTab": "Import"
 }
 ```
-
-#### Request Body
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `signups` | array | Yes | Array of signup objects (max 100) |
 | `sheetTab` | string | No | Target sheet tab |
 
-Each signup object can contain:
-- `email` (required) - Valid email address
-- `name` (optional) - User's name
-- `source` (optional) - Signup source
-
-#### Response
+Each signup object accepts the same fields as `/api/signup`.
 
 **Success (200)**:
-
 ```json
 {
   "success": true,
   "message": "Bulk signup processed",
   "data": {
-    "total": 3,
+    "total": 2,
     "successful": 2,
-    "failed": 1,
+    "failed": 0,
     "results": [
-      {
-        "email": "user1@example.com",
-        "success": true
-      },
-      {
-        "email": "user2@example.com",
-        "success": true
-      },
-      {
-        "email": "user3@example.com",
-        "success": false,
-        "error": "Duplicate email"
-      }
+      {"email": "user1@example.com", "success": true},
+      {"email": "user2@example.com", "success": true}
     ]
   }
 }
 ```
 
-**Error (400)** - Too many signups:
-
-```json
-{
-  "success": false,
-  "error": "Validation error",
-  "message": "signups: Maximum 100 signups allowed per request"
-}
-```
-
-#### Example
-
 ```bash
 curl -X POST http://localhost:3000/api/signup/bulk \
   -H "Content-Type: application/json" \
-  -d '{
-    "signups": [
-      {"email": "user1@example.com"},
-      {"email": "user2@example.com"}
-    ],
-    "sheetTab": "Import"
-  }'
+  -d '{"signups": [{"email": "user1@example.com"}, {"email": "user2@example.com"}], "sheetTab": "Import"}'
 ```
 
 ---
 
-### GET `/api/stats`
+## POST `/api/signup/form`
 
-Get signup statistics for a sheet tab.
+HTML form submission endpoint. Accepts `application/x-www-form-urlencoded` or `multipart/form-data`.
 
-#### Request
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `email` | string | Yes | Valid email address |
+| `name` | string | No | User's name |
+| `sheetTab` | string | No | Target sheet tab |
+| `site` | string | No | Site name |
+| `source` | string | No | Signup source (default: `"form"`) |
+| `tags` | string | No | Comma-separated tags (default: `"form-submit"`) |
 
+```bash
+curl -X POST http://localhost:3000/api/signup/form \
+  -d "email=user@example.com&name=John+Doe&sheetTab=Newsletter"
 ```
-GET /api/stats?sheetTab=Sheet1
-```
 
-#### Query Parameters
+---
+
+## GET `/api/stats`
+
+Signup statistics for a sheet tab.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `sheetTab` | string | Yes | Sheet tab to get stats for |
-
-#### Response
+| `sheetTab` | string | Yes | Sheet tab to query |
 
 **Success (200)**:
-
 ```json
 {
   "success": true,
@@ -300,158 +209,103 @@ GET /api/stats?sheetTab=Sheet1
 }
 ```
 
-#### Example
-
 ```bash
 curl "http://localhost:3000/api/stats?sheetTab=Sheet1"
 ```
 
 ---
 
-### GET `/api/health`
-
-Health check endpoint.
-
-#### Request
-
-```
-GET /api/health
-```
-
-#### Response
+## GET `/api/health`
 
 **Success (200)**:
-
 ```json
-{
-  "status": "ok",
-  "timestamp": "2025-01-12T10:30:00.000Z"
-}
-```
-
-#### Example
-
-```bash
-curl http://localhost:3000/api/health
+{"status": "ok", "timestamp": "2025-01-12T10:30:00.000Z"}
 ```
 
 ---
 
-## Validation Rules
+## GET `/api/config`
 
-### Email Validation
+Public configuration for frontend clients. Does not expose secrets.
 
-Emails are validated using a strict regex pattern:
-
-```javascript
-/^[^\s@]+@[^\s@]+\.[^\s@]+$/
+**Success (200)**:
+```json
+{
+  "turnstileSiteKey": "0x4AAAAAAAxxxxxxxx",
+  "turnstileEnabled": true,
+  "defaultSheetTab": "Sheet1",
+  "sheetTabs": ["Sheet1"]
+}
 ```
 
-Requirements:
-- Must contain exactly one `@` symbol
-- Must have at least one character before `@`
-- Must have at least one `.` after `@`
-- No whitespace allowed
+| Field | Type | Description |
+|-------|------|-------------|
+| `turnstileSiteKey` | string \| null | Turnstile site key (`null` if not configured) |
+| `turnstileEnabled` | boolean | Whether Turnstile is enabled |
+| `defaultSheetTab` | string | Default sheet tab name |
+| `sheetTabs` | string[] | Available sheet tabs |
 
-### Sheet Tab Validation
+---
 
-- Must be a non-empty string
-- Special characters are allowed
-- Max length: 100 characters
+## Validation
 
-### Tags Validation
+### Email
 
-- Must be an array of strings
-- Each tag must be a non-empty string
-- Max 50 tags per signup
-- Each tag max 50 characters
+Emails are validated with: `^[^\s@]+@[^\s@]+\.[^\s@]+$`
 
-## Error Codes
+- Exactly one `@`, at least one `.` after `@`, no whitespace
+- Max 254 characters (RFC 5321)
+- Automatically lowercased and trimmed
 
-| Status Code | Error Type | Description |
-|-------------|------------|-------------|
-| 200 | - | Success |
-| 400 | Validation error | Invalid request data |
-| 409 | Duplicate email | Email already exists |
-| 500 | Internal server error | Server error |
-| 503 | Service unavailable | Google Sheets API error |
+### Field Limits
 
-## Rate Limiting
+| Field | Max Length |
+|-------|-----------|
+| `email` | 254 characters |
+| `name` | 100 characters |
+| `source` | 50 characters |
+| `sheetTab` | 100 characters |
+| `tags` | 50 items, 50 chars each |
+| `signups` (bulk) | 100 items |
 
-The API does not include built-in rate limiting. For production use, implement rate limiting using:
+## Status Codes
 
-```typescript
-// Example using fastify-rate-limit
-import fp from 'fastify-plugin';
-import rateLimit from '@fastify/rate-limit';
+| Code | Description |
+|------|-------------|
+| `200` | Success |
+| `400` | Validation error |
+| `409` | Duplicate email |
+| `415` | Unsupported media type (form endpoint) |
+| `500` | Internal server error |
+| `503` | Google Sheets API error |
 
-await fastify.register(rateLimit, {
-  max: 100, // 100 requests
-  timeWindow: '1 minute', // per minute
-});
+## Error Format
+
+All errors follow this structure:
+
+```json
+{
+  "success": false,
+  "error": "Error type",
+  "message": "Human-readable message",
+  "details": {}
+}
 ```
 
 ## CORS
 
-Configure CORS origins in your `.env` file:
+Configure allowed origins via `ALLOWED_ORIGINS` environment variable:
 
 ```bash
-# Allow all origins (not recommended for production)
-ALLOWED_ORIGINS=*
-
-# Allow specific origins
-ALLOWED_ORIGINS=https://yourwebsite.com,https://www.yourwebsite.com
-
-# Allow multiple origins with subdomains
-ALLOWED_ORIGINS=https://*.yourwebsite.com
+ALLOWED_ORIGINS=https://yoursite.com,https://www.yoursite.com
 ```
 
-## Testing Endpoints
+## Rate Limiting
 
-### Using cURL
-
-```bash
-# Basic signup
-curl -X POST http://localhost:3000/api/signup \
-  -H "Content-Type: application/json" \
-  -d '{"email": "test@example.com", "sheetTab": "Sheet1"}'
-
-# Extended signup
-curl -X POST http://localhost:3000/api/signup/extended \
-  -H "Content-Type: application/json" \
-  -d '{"email": "test@example.com", "name": "Test User"}'
-
-# Bulk signup
-curl -X POST http://localhost:3000/api/signup/bulk \
-  -H "Content-Type: application/json" \
-  -d '{"signups": [{"email": "test1@example.com"}]}'
-
-# Get stats
-curl "http://localhost:3000/api/stats?sheetTab=Sheet1"
-
-# Health check
-curl http://localhost:3000/api/health
-```
-
-### Using JavaScript
-
-```javascript
-// Basic signup
-const response = await fetch('http://localhost:3000/api/signup', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({
-    email: 'test@example.com',
-    sheetTab: 'Sheet1'
-  }),
-});
-
-const data = await response.json();
-console.log(data);
-```
+No built-in rate limiting. Use Cloudflare's rate limiting for Workers deployments, or a reverse proxy (Nginx, Caddy) for Docker/VPS.
 
 ## Next Steps
 
 - **[HTML Form Integration](/guide/integration)** - Embed forms on your website
 - **[Deployment](/guide/deployment)** - Deploy to production
-- **[Configuration](/reference/configuration)** - Environment variables reference
+- **[Configuration](/reference/configuration)** - All environment variables

@@ -1,465 +1,148 @@
 # Troubleshooting
 
-Common issues and solutions for the email signup API.
-
-## Quick Diagnostics
-
-### Health Check
-
-First, check if the API is running:
+## Quick Check
 
 ```bash
 curl http://localhost:3000/api/health
+# Expected: {"status": "ok", "timestamp": "..."}
 ```
 
-Expected response:
-
-```json
-{
-  "status": "ok",
-  "timestamp": "2025-01-12T10:30:00.000Z"
-}
-```
-
-### Check Logs
+If the health check fails, the server isn't running. Check logs:
 
 ```bash
-# Docker
-docker-compose logs -f
-
-# PM2
-pm2 logs signup-api
-
-# Direct Bun
-bun run dev  # Logs appear in terminal
+bun run dev                   # local - logs in terminal
+docker-compose logs -f        # Docker
+bun run workers:tail          # Cloudflare Workers
 ```
 
-## Common Issues
+---
 
-### Server Won't Start
+## Server Won't Start
 
-#### Port Already in Use
-
-**Error**: `Error: listen EADDRINUSE: address already in use :::3000`
-
-**Solutions**:
+### Port in Use
 
 ```bash
-# Option 1: Use a different port
-PORT=3001 bun run dev
-
-# Option 2: Kill the process using port 3000
-lsof -ti:3000 | xargs kill -9
-
-# Option 3: Find and kill manually
-lsof -i :3000
-kill -9 <PID>
+PORT=3001 bun run dev         # use different port
+lsof -ti:3000 | xargs kill   # or kill existing process
 ```
 
-#### Module Not Found
-
-**Error**: `Cannot find module '...'`
-
-**Solution**:
+### Module Not Found
 
 ```bash
-# Reinstall dependencies
 rm -rf node_modules bun.lockb
 bun install
 ```
 
-#### Environment Variables Missing
+### Missing Environment Variables
 
-**Error**: `GOOGLE_SHEET_ID is required`
-
-**Solution**:
-
-1. Check `.env` file exists in project root
-2. Verify all required variables are set
-3. Restart the server after changing `.env`
+The server fails with a Zod validation error if required variables are missing. Check:
 
 ```bash
-# Verify file exists
-ls -la .env
-
-# Check variables are set
-cat .env
+ls -la .env                   # file exists?
 ```
 
-### Google Sheets Issues
+Required variables: `GOOGLE_SHEET_ID`, `GOOGLE_CREDENTIALS_EMAIL`, `GOOGLE_PRIVATE_KEY`
 
-#### Permission Denied
+---
 
-**Error**: `The caller does not have permission`
+## Google Sheets
 
-**Causes**:
-1. Service account doesn't have access to the sheet
-2. Service account has "Viewer" instead of "Editor" permission
-3. Wrong sheet ID
+### Permission Denied
 
-**Solutions**:
+*"The caller does not have permission"*
 
-1. **Verify sheet sharing**:
-   - Open Google Sheet
-   - Click "Share"
-   - Confirm service account email is listed with "Editor" permission
-   - Wait a few minutes for permissions to propagate
+1. Open the Google Sheet and click Share
+2. Confirm the service account email is listed with **Editor** permission
+3. Wait 1-2 minutes for permissions to propagate
 
-2. **Check sheet ID**:
-   ```bash
-   # Verify ID matches the URL
-   # URL: https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjGMUUqpt35/edit
-   # ID: 1BxiMVs0XRA5nFMdKvBdBZjGMUUqpt35 (the part between /d/ and /edit)
-   ```
+### Invalid Credentials
 
-3. **Re-share the sheet**:
-   - Remove service account from sharing
-   - Add it back with "Editor" permission
-   - Wait 1-2 minutes
+*"invalid_grant" or "unauthorized_client"*
 
-#### Invalid Credentials
+- Ensure `GOOGLE_PRIVATE_KEY` uses `\n` for line breaks and is wrapped in quotes
+- Verify `GOOGLE_CREDENTIALS_EMAIL` matches `client_email` from the JSON key file
+- If the key was rotated, regenerate in Google Cloud Console > IAM > Service Accounts
 
-**Error**: `invalid_grant` or `unauthorized_client`
+### Sheet Not Found
 
-**Causes**:
-1. Malformed private key
-2. Wrong service account email
-3. Key was rotated or deleted
+*"Requested entity was not found"*
 
-**Solutions**:
+- Verify `GOOGLE_SHEET_ID` matches the ID in the sheet URL (between `/d/` and `/edit`)
+- Confirm the sheet exists and you have access
 
-1. **Check private key format**:
-   ```bash
-   # Correct - with \n for line breaks
-   GOOGLE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFA...\n-----END PRIVATE KEY-----\n"
-   ```
+### API Quota Exceeded
 
-2. **Verify service account email**:
-   ```bash
-   # Should match the client_email in your JSON key file
-   GOOGLE_CREDENTIALS_EMAIL=service-account@project-id.iam.gserviceaccount.com
-   ```
+Google Sheets API: 100 requests per 100 seconds, 10,000 per day.
 
-3. **Regenerate service account key**:
-   - Go to Google Cloud Console
-   - IAM & Admin > Service Accounts
-   - Delete old keys
-   - Create new key
-   - Update `.env` with new credentials
+For high volume: implement queuing, caching, or use a database with periodic Sheets sync.
 
-#### Sheet Not Found
+---
 
-**Error**: `Requested entity was not found`
+## CORS
 
-**Solutions**:
+*"Access to fetch has been blocked by CORS policy"*
 
-1. Verify sheet ID is correct
-2. Check that the sheet still exists
-3. Confirm you have access to the sheet
-4. Try opening the sheet in a browser
-
-#### API Quota Exceeded
-
-**Error**: `Quota exceeded` or `Rate limit exceeded`
-
-**Solutions**:
-
-1. **Wait and retry** - Quotas reset every 100 seconds
-2. **Implement caching** - Reduce API calls
-3. **Use a queue** - Batch requests
-4. **Request quota increase** - Google Cloud Console > APIs & Services > Quotas
-
-### Discord Issues
-
-#### Webhook Not Working
-
-**Symptoms**: No Discord notifications appearing
-
-**Diagnosis**:
+Add your domain to `ALLOWED_ORIGINS` and restart:
 
 ```bash
-# Test webhook directly
-curl -X POST $DISCORD_WEBHOOK_URL \
-  -H "Content-Type: application/json" \
-  -d '{"content": "Test message"}'
+ALLOWED_ORIGINS=https://yoursite.com,https://www.yoursite.com
 ```
 
-**Solutions**:
+---
 
-1. **Verify webhook URL**:
-   ```bash
-   # Check URL is set
-   echo $DISCORD_WEBHOOK_URL
-   ```
+## Validation Errors
 
-2. **Check webhook exists**:
-   - Go to Discord Server Settings > Integrations
-   - Verify webhook still exists
-   - Create new webhook if needed
+*"email: Invalid email address"*
 
-3. **Check channel permissions**:
-   - Verify webhook can post in the channel
-   - Check bot permissions
+Valid formats: `user@example.com`, `user+tag@example.co.uk`
+Invalid: `user@`, `@example.com`, `user example.com`
 
-#### Rate Limit Errors
+Check the `details` field in the error response for which fields failed.
 
-**Error**: `You are being rate limited` or `429 Too Many Requests`
+---
 
-**Solution**:
+## Docker
 
-1. Discord allows 30 webhook requests per 60 seconds
-2. Implement a queue for high-volume signups
-3. Aggregate notifications instead of sending one per signup
-
-### CORS Issues
-
-#### Blocked by CORS Policy
-
-**Error**: `Access to fetch at '...' has been blocked by CORS policy`
-
-**Solutions**:
-
-1. **Check `ALLOWED_ORIGINS`**:
-   ```bash
-   # .env
-   ALLOWED_ORIGINS=https://yourwebsite.com
-   ```
-
-2. **Include all domains**:
-   ```bash
-   # Multiple domains
-   ALLOWED_ORIGINS=https://yourwebsite.com,https://www.yourwebsite.com
-
-   # Development only
-   ALLOWED_ORIGINS=*
-   ```
-
-3. **Restart server** after changing `.env`
-
-4. **Check browser console** for the exact origin being blocked
-
-### Validation Errors
-
-#### Invalid Email Format
-
-**Error**: `email: Invalid email address`
-
-**Solutions**:
-
-1. **Check email format**:
-   ```javascript
-   // Valid
-   user@example.com
-   user.name@example.com
-   user+tag@example.co.uk
-
-   // Invalid
-   user@ (missing domain)
-   @example.com (missing user)
-   user example.com (missing @)
-   ```
-
-2. **Client-side validation**:
-   ```html
-   <input type="email" required>
-   ```
-
-#### Validation Error Details
-
-**Error**: `Validation error` with details object
-
-**Example**:
-```json
-{
-  "success": false,
-  "error": "Validation error",
-  "details": {
-    "email": "Invalid email address",
-    "sheetTab": "Must be a string"
-  }
-}
-```
-
-**Solution**: Fix the fields listed in `details`
-
-### Docker Issues
-
-#### Container Keeps Restarting
-
-**Diagnosis**:
+### Container Keeps Restarting
 
 ```bash
-# Check logs
-docker logs signup-api
-
-# Check container status
-docker ps -a
+docker logs signup-api        # check error message
 ```
 
-**Common causes**:
+Usually: missing env vars or invalid Google credentials. Test with `bun run dev` first to isolate.
 
-1. **Missing environment variables**
-   - Add all required variables to docker-compose.yml or `.env`
-   - Restart container
-
-2. **Invalid Google credentials**
-   - Verify credentials in `.env`
-   - Test with direct Bun run first
-
-3. **Port conflicts**
-   - Change port mapping in docker-compose.yml
-
-#### Out of Memory
-
-**Error**: Container killed with OOM (Out of Memory)
-
-**Solutions**:
-
-1. **Increase memory limit**:
-   ```yaml
-   # docker-compose.yml
-   services:
-     app:
-       deploy:
-         resources:
-           limits:
-             memory: 512M
-   ```
-
-2. **Check for memory leaks**:
-   ```bash
-   docker stats signup-api
-   ```
-
-### Performance Issues
-
-#### Slow Response Times
-
-**Diagnosis**:
+### High Memory
 
 ```bash
-# Test response time
-time curl http://localhost:3000/api/health
+docker stats signup-api       # check usage
+docker run -m 512m signup-api # limit memory
 ```
 
-**Solutions**:
+---
 
-1. **Check Google Sheets API latency** - This is usually the bottleneck
-2. **Implement caching** - Cache frequent reads
-3. **Use connection pooling** - Fastify handles this by default
-4. **Add CDN** - For static assets
+## Performance
 
-#### High CPU Usage
+**Slow responses**: Usually Google Sheets API latency. Consider caching, or switch to Cloudflare Workers for edge deployment.
 
-**Diagnosis**:
+**High CPU**: Check log level (`LOG_LEVEL=warn` in production), and add rate limiting to prevent abuse.
+
+---
+
+## Tests Failing
 
 ```bash
-# Check CPU usage
-docker stats signup-api
-# or
-top
+lsof -ti:3000 | xargs kill   # kill any running server
+bun test test/unit            # run unit tests only (use mocks)
 ```
 
-**Solutions**:
-
-1. **Check for infinite loops**
-2. **Review logging level** - Reduce logging in production
-3. **Add rate limiting** - Prevent abuse
-
-### Testing Issues
-
-#### Tests Failing
-
-**Common causes**:
-
-1. **Port already in use**:
-   ```bash
-   # Kill existing test servers
-   lsof -ti:3000 | xargs kill -9
-   ```
-
-2. **Environment not cleared**:
-   ```bash
-   # Clear config cache between tests
-   # Tests should handle this automatically
-   ```
-
-3. **Mock service issues**:
-   ```bash
-   # Run unit tests only (use mocks)
-   bun test test/unit
-   ```
-
-## Diagnostic Commands
-
-### Check Server Status
-
-```bash
-# Process running
-ps aux | grep "bun run index.ts"
-
-# Port listening
-lsof -i :3000
-
-# HTTP response
-curl -I http://localhost:3000
-```
-
-### Check Configuration
-
-```bash
-# Environment variables
-env | grep GOOGLE_
-
-# Test config loading
-bun -e "import('./src/config.ts').then(m => console.log(m))"
-```
-
-### Check Google Sheets Access
-
-```bash
-# Test API directly
-curl -X POST http://localhost:3000/api/signup \
-  -H "Content-Type: application/json" \
-  -d '{"email": "test@example.com", "sheetTab": "Sheet1"}'
-```
-
-### Check Logs
-
-```bash
-# Follow logs
-docker-compose logs -f
-
-# Last 100 lines
-docker-compose logs --tail 100
-
-# Specific service
-docker-compose logs -f app
-```
+---
 
 ## Getting Help
 
-If you're still having trouble:
-
-1. **Check the documentation**:
-   - [Getting Started](/guide/getting-started)
-   - [Google Sheets Setup](/guide/google-sheets)
-   - [API Reference](/guide/api)
-
-2. **Search existing issues**:
-   - [GitHub Issues](https://github.com/briansunter/subs/issues)
-
-3. **Create a new issue** with:
-   - Error messages
+1. Check the [documentation](/guide/getting-started)
+2. Search [GitHub Issues](https://github.com/briansunter/subs/issues)
+3. Open a new issue with:
+   - Error message
    - Steps to reproduce
-   - Environment details (OS, Bun version)
-   - Relevant logs
-
-4. **Include diagnostic information**:
-   ```bash
-   # Gather diagnostics
-   bun --version
-   uname -a
-   cat .env | grep -v PRIVATE_KEY  # Hide private key
-   curl -s http://localhost:3000/api/health
-   ```
+   - `bun --version` and OS
+   - Relevant logs (redact private keys)

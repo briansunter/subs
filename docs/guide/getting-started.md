@@ -1,162 +1,86 @@
 # Getting Started
 
-Get **subs** up and running in ~5 minutes. You'll have a production-ready email signup API with invisible bot protection, Google Sheets storage, and optional Discord notifications.
-
-## What You're Building
-
-**subs** is a complete email signup solution that:
-
-- 🛡️ Blocks 99% of spam with Cloudflare Turnstile (invisible to users)
-- 📧 Validates, deduplicates, and stores emails in Google Sheets
-- 📊 Tracks metrics with Prometheus out of the box
-- 🔌 Embeds anywhere: iframe, inline, direct POST, or JavaScript SDK
-- 📢 Sends real-time notifications to Discord
-
-**Time to complete**: ~5 minutes
-**Difficulty**: Beginner-friendly
+Get **subs** running locally in about 5 minutes.
 
 ## Prerequisites
 
-Before you begin, ensure you have:
+- [Bun](https://bun.sh/) runtime
+- A Google account (for Google Sheets)
 
-- **Bun** - Install from [bun.sh](https://bun.sh/)
-- **Google Account** - For Google Sheets integration (free tier works great)
-- **Code Editor** - VS Code, or any editor of your choice
-- **Terminal** - For running commands
-
-## Installation
-
-### 1. Clone the Repository
+## Install
 
 ```bash
 git clone https://github.com/briansunter/subs.git
 cd subs
-```
-
-### 2. Install Dependencies
-
-```bash
 bun install
 ```
 
-### 3. Configure Environment Variables
+## Configure
 
-Copy the example environment file:
+Copy the example environment file and add your credentials:
 
 ```bash
 cp .env.example .env
 ```
 
-Edit `.env` with your configuration:
+Edit `.env`:
 
 ```bash
-# Server Configuration
-PORT=3000
-HOST=0.0.0.0
-NODE_ENV=development
-
-# CORS - Use specific domains in production
-ALLOWED_ORIGINS=*
-
 # Google Sheets (required)
 GOOGLE_SHEET_ID=your_sheet_id_here
 GOOGLE_CREDENTIALS_EMAIL=your-service-account@project-id.iam.gserviceaccount.com
 GOOGLE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nYour private key here\n-----END PRIVATE KEY-----\n"
 
-# Default sheet tab
+# CORS (use specific domains in production)
+ALLOWED_ORIGINS=*
+
+# Optional
 DEFAULT_SHEET_TAB=Sheet1
-
-# Discord (optional)
-DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/your-webhook-url
-
-# Logging
+PORT=3000
 LOG_LEVEL=info
+ENABLE_METRICS=true
+
+# Cloudflare Turnstile (optional)
+CLOUDFLARE_TURNSTILE_SITE_KEY=your_site_key
+CLOUDFLARE_TURNSTILE_SECRET_KEY=your_secret_key
 ```
 
-See the [Google Sheets Setup](/guide/google-sheets) guide for detailed instructions on getting credentials.
+See [Google Sheets Setup](/guide/google-sheets) for how to create a service account and get credentials.
 
-## Development
+## Run
 
-### Choose Your Development Environment
-
-**Option 1: Local Development (Bun)**
+**Local development** (Bun with hot reload):
 ```bash
 bun run dev
+# http://localhost:3000
 ```
-Server runs at `http://localhost:3000` with hot reload.
 
-**Option 2: Cloudflare Workers Development**
+**Cloudflare Workers development**:
 ```bash
+cp .env.example .dev.vars  # Workers uses .dev.vars
 bun run dev:workers
+# http://localhost:8787
 ```
-Server runs at `http://localhost:8787` using Wrangler for Workers testing.
 
-See the [Deployment Guide](/guide/deployment#1-cloudflare-workers-deployment-recommended) for more Cloudflare Workers information.
+## Verify
 
-### Start the Development Server
+Open `http://localhost:3000` to see the built-in signup form, or check the health endpoint:
 
 ```bash
-bun run dev
+curl http://localhost:3000/api/health
 ```
-
-The server will start with hot reload enabled at `http://localhost:3000`
-
-### Verify It's Working
-
-Open your browser and navigate to:
-
-- **`http://localhost:3000`** - The embedded signup form
-- **`http://localhost:3000/api/health`** - Health check endpoint
-
-You should see:
 
 ```json
-{
-  "status": "ok",
-  "timestamp": "2025-01-12T10:30:00.000Z"
-}
+{"status": "ok", "timestamp": "2025-01-12T10:30:00.000Z"}
 ```
 
-## Testing
-
-### Run All Tests
-
-```bash
-bun test
-```
-
-### Run Unit Tests Only
-
-```bash
-bun test test/unit
-```
-
-### Run Integration Tests Only
-
-```bash
-bun test test/integration
-```
-
-### Run Tests with Coverage
-
-```bash
-bun test --coverage
-```
-
-## Quick Test
-
-Test the API with a simple signup request:
+## Test a Signup
 
 ```bash
 curl -X POST http://localhost:3000/api/signup \
   -H "Content-Type: application/json" \
-  -d '{
-    "email": "test@example.com",
-    "sheetTab": "Sheet1"
-  }'
+  -d '{"email": "test@example.com", "sheetTab": "Sheet1"}'
 ```
-
-Expected response:
 
 ```json
 {
@@ -170,132 +94,93 @@ Expected response:
 }
 ```
 
-Check your Google Sheet - the signup should appear in the "Sheet1" tab.
+Check your Google Sheet - the email should appear in the "Sheet1" tab.
 
-## Project Structure
+## Run Tests
 
-```
-subs/
-├── src/
-│   ├── config.ts              # Environment configuration
-│   ├── app.ts                 # Base Elysia app factory
-│   ├── index.worker.ts        # Cloudflare Worker entry point
-│   ├── routes/
-│   │   ├── signup.elysia.ts   # Elysia route definitions
-│   │   └── handlers.ts        # Business logic
-│   ├── schemas/
-│   │   └── signup.ts          # Zod validation schemas
-│   ├── services/
-│   │   ├── sheets.ts          # Google Sheets integration
-│   │   └── metrics.ts         # Prometheus metrics
-│   └── utils/
-│       └── logger.ts          # Pino logging
-├── test/                      # Test files
-│   ├── unit/                  # Unit tests
-│   ├── integration/           # Integration tests
-│   ├── mocks/                 # Mock services
-│   └── helpers/               # Test helpers
-├── docs/                      # VitePress documentation
-├── index.ts                   # Server entry point (Docker/Bun)
-├── wrangler.toml              # Cloudflare Workers configuration
-├── Dockerfile                 # Docker configuration
-├── docker-compose.yml         # Docker Compose configuration
-├── .env.example               # Environment variables template
-└── package.json
+```bash
+bun test                    # all tests
+bun test test/unit          # unit tests
+bun test test/integration   # integration tests
+bun test --coverage         # with coverage
 ```
 
 ## Available Scripts
 
 | Command | Description |
 |---------|-------------|
-| `bun run dev` | Start development server (Docker/Bun) with hot reload |
-| `bun run start` | Start production server (Docker/Bun) |
-| `bun run dev:workers` | Start Cloudflare Workers development server |
+| `bun run dev` | Development server with hot reload |
+| `bun run start` | Production server |
+| `bun run dev:workers` | Cloudflare Workers dev server |
 | `bun run deploy:workers` | Deploy to Cloudflare Workers |
-| `bun run workers:tail` | View real-time logs from deployed Workers |
-| `bun run workers:secret` | Set a Workers secret (prompts for name/value) |
+| `bun run workers:tail` | Real-time logs from deployed Workers |
+| `bun run workers:secret` | Set a Workers secret |
 | `bun test` | Run all tests |
-| `bun test test/unit` | Run unit tests only |
-| `bun test test/integration` | Run integration tests only |
-| `bun test --coverage` | Run tests with coverage report |
-| `bun run docker:build` | Build Docker image |
-| `bun run docker:up` | Start containers with Docker Compose |
-| `bun run docker:down` | Stop Docker Compose containers |
-| `bun run docs:dev` | Start VitePress documentation server |
-| `bun run docs:build` | Build documentation for production |
+| `bunx biome check .` | Lint |
+| `bunx biome check --write .` | Lint and auto-fix |
+| `bun run docs:dev` | Documentation dev server |
+| `bun run docs:build` | Build documentation |
+| `bun run docker:up` | Start with Docker Compose |
 
 ## Code Quality
 
-### Linting
-
-The project uses [Biome](https://biomejs.dev/) for linting and formatting.
+The project uses [Biome](https://biomejs.dev/) for linting and formatting:
 
 ```bash
-# Check all files
-bunx biome check .
-
-# Auto-fix issues
-bunx biome check --write .
-
-# Format files
-bunx biome format --write .
+bunx biome check .          # check
+bunx biome check --write .  # auto-fix
+bunx biome format --write . # format
 ```
 
-### Type Checking
+## Project Structure
 
-The project uses TypeScript with strict mode enabled.
-
-```bash
-# Type check (included in bun test)
-bun tsc --noEmit
+```
+subs/
+├── src/
+│   ├── config.ts              # Zod-validated environment config
+│   ├── app.ts                 # Elysia app factory (CORS, logging, security)
+│   ├── index.worker.ts        # Cloudflare Worker entry point
+│   ├── routes/
+│   │   ├── signup.elysia.ts   # Route definitions
+│   │   └── handlers.ts        # Business logic (DI via SignupContext)
+│   ├── schemas/
+│   │   └── signup.ts          # Zod request/response schemas
+│   ├── services/
+│   │   ├── sheets.ts          # Google Sheets API (jose JWT auth)
+│   │   ├── turnstile.ts       # Cloudflare Turnstile verification
+│   │   └── metrics.ts         # Prometheus metrics
+│   ├── plugins/
+│   │   ├── logging.ts         # Request/response logging
+│   │   ├── metrics.ts         # Metrics middleware
+│   │   └── security.ts        # Security headers
+│   └── utils/
+│       └── logger.ts          # Pino structured logging
+├── test/
+│   ├── unit/                  # Unit tests
+│   ├── integration/           # Integration tests (Elysia handle())
+│   ├── mocks/                 # Mock services
+│   └── helpers/               # Test app factory, request helpers
+├── docs/                      # VitePress documentation
+├── index.ts                   # Server entry point (Bun/Docker)
+├── wrangler.toml              # Cloudflare Workers config
+├── Dockerfile                 # Multi-stage Docker build
+└── package.json
 ```
 
 ## Next Steps
 
-1. **[Google Sheets Setup](/guide/google-sheets)** - Configure Google Sheets integration
-2. **[Discord Setup](/guide/discord)** - Add Discord notifications
+1. **[Google Sheets Setup](/guide/google-sheets)** - Service account configuration
+2. **[Cloudflare Turnstile](/guide/turnstile)** - Invisible bot protection
 3. **[HTML Form Integration](/guide/integration)** - Embed forms on your website
-4. **[API Reference](/guide/api)** - Explore all API endpoints
-5. **[Deployment](/guide/deployment)** - Deploy to production
+4. **[API Reference](/guide/api)** - All endpoints and schemas
+5. **[Deployment](/guide/deployment)** - Production deployment
 
-## Common Issues
+## Troubleshooting
 
-### Port Already in Use
+**Port in use**: `PORT=3001 bun run dev`
 
-If you see an error about port 3000 being in use:
+**Google Sheets errors**: Check that the sheet is shared with the service account email as "Editor". See [Google Sheets Troubleshooting](/guide/google-sheets#troubleshooting).
 
-```bash
-# Option 1: Use a different port
-PORT=3001 bun run dev
+**Environment variables not loading**: Ensure `.env` is in the project root with no spaces around `=`.
 
-# Option 2: Kill the process using port 3000
-lsof -ti:3000 | xargs kill -9
-```
-
-### Google Sheets Errors
-
-If you see errors related to Google Sheets:
-
-1. Verify your credentials in `.env`
-2. Make sure you shared the sheet with the service account email
-3. Check that the service account has "Editor" permissions
-
-See [Google Sheets Troubleshooting](/guide/google-sheets#troubleshooting) for more details.
-
-### Environment Variables Not Loading
-
-Make sure your `.env` file is in the project root and properly formatted:
-
-```bash
-# Correct
-GOOGLE_SHEET_ID=abc123
-
-# Incorrect (no spaces around =)
-GOOGLE_SHEET_ID = abc123
-```
-
-## Getting Help
-
-- **Documentation**: Check the [Guide](/guide/) section
-- **Troubleshooting**: See [Troubleshooting](/guide/troubleshooting)
-- **Issues**: Report bugs on [GitHub Issues](https://github.com/briansunter/subs/issues)
+More help: [Troubleshooting guide](/guide/troubleshooting) | [GitHub Issues](https://github.com/briansunter/subs/issues)

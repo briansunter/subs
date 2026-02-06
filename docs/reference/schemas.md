@@ -1,150 +1,49 @@
 # Schemas
 
-Zod validation schemas for request and response data.
+Zod validation schemas for request and response data. All schemas are defined in `src/schemas/signup.ts`.
 
-## Overview
-
-The API uses Zod for runtime validation and TypeScript type safety. All schemas are defined in `src/schemas/signup.ts`.
-
-## Signup Schemas
+## Request Schemas
 
 ### `signupSchema`
 
-Validates basic signup requests.
+Basic signup validation.
 
 ```typescript
 {
-  email: string;      // Valid email address (required)
-  sheetTab?: string;  // Target sheet tab (optional)
+  email: string;              // Valid email, max 254 chars, auto-lowercased
+  sheetTab?: string;          // Target sheet tab
+  site?: string;              // Site name (multi-site support)
+  metadata?: Record<string, unknown>;  // Arbitrary metadata
+  turnstileToken?: string;    // Cloudflare Turnstile token
 }
 ```
 
-**Validation Rules**:
-- `email` must be a valid email format
-- `sheetTab` must be a non-empty string if provided
-- Max length for `sheetTab`: 100 characters
+### `extendedSignupSchema`
 
-**Example**:
-
-```json
-{
-  "email": "user@example.com",
-  "sheetTab": "Sheet1"
-}
-```
-
----
-
-### `signupExtendedSchema`
-
-Validates extended signup requests with additional fields.
+Extends `signupSchema` with additional fields.
 
 ```typescript
 {
-  email: string;      // Valid email address (required)
-  name?: string;      // User's name (optional)
-  source?: string;    // Signup source (optional)
-  tags?: string[];    // Array of tags (optional)
-  sheetTab?: string;  // Target sheet tab (optional)
+  // ...all signupSchema fields, plus:
+  name?: string;              // User's name (max 100 chars)
+  source?: string;            // Signup source (default: "api", max 50 chars)
+  tags?: string[];            // Tags (max 50 items, 50 chars each)
 }
 ```
-
-**Validation Rules**:
-- `email` must be a valid email format
-- `name` max length: 100 characters
-- `source` max length: 50 characters
-- `tags` max 50 items, each max 50 characters
-- `sheetTab` max length: 100 characters
-
-**Example**:
-
-```json
-{
-  "email": "user@example.com",
-  "name": "John Doe",
-  "source": "website",
-  "tags": ["newsletter", "beta"],
-  "sheetTab": "Newsletter"
-}
-```
-
----
 
 ### `bulkSignupSchema`
 
-Validates bulk signup requests.
+Array of signups for bulk operations.
 
 ```typescript
 {
-  signups: Array<{
-    email: string;   // Valid email address (required)
-    name?: string;   // User's name (optional)
-    source?: string; // Signup source (optional)
-  }>;
-  sheetTab?: string; // Target sheet tab (optional)
+  signups: SignupInput[];     // 1-100 signup objects
 }
 ```
-
-**Validation Rules**:
-- `signups` must be an array with 1-100 items
-- Each signup must have a valid `email`
-- Other fields in each signup are optional
-
-**Example**:
-
-```json
-{
-  "signups": [
-    {
-      "email": "user1@example.com",
-      "name": "User One"
-    },
-    {
-      "email": "user2@example.com"
-    }
-  ],
-  "sheetTab": "Import"
-}
-```
-
----
-
-### `signupItemSchema`
-
-Validates individual signup items within bulk requests.
-
-```typescript
-{
-  email: string;   // Valid email address (required)
-  name?: string;   // User's name (optional)
-  source?: string; // Signup source (optional)
-}
-```
-
----
 
 ## Response Schemas
 
-### `signupResponseSchema`
-
-Standard success response for signup operations.
-
-```typescript
-{
-  success: true;
-  message: string;
-  data: {
-    email: string;
-    timestamp: string;    // ISO 8601 format
-    sheetTab: string;
-    name?: string;
-    source?: string;
-    tags?: string[];
-  };
-}
-```
-
-**Example**:
+### Success Response
 
 ```json
 {
@@ -158,30 +57,7 @@ Standard success response for signup operations.
 }
 ```
 
----
-
-### `bulkSignupResponseSchema`
-
-Response for bulk signup operations.
-
-```typescript
-{
-  success: true;
-  message: string;
-  data: {
-    total: number;       // Total signups processed
-    successful: number;  // Number of successful signups
-    failed: number;      // Number of failed signups
-    results: Array<{
-      email: string;
-      success: boolean;
-      error?: string;    // Error message if failed
-    }>;
-  };
-}
-```
-
-**Example**:
+### Bulk Response
 
 ```json
 {
@@ -192,42 +68,15 @@ Response for bulk signup operations.
     "successful": 2,
     "failed": 1,
     "results": [
-      {
-        "email": "user1@example.com",
-        "success": true
-      },
-      {
-        "email": "user2@example.com",
-        "success": true
-      },
-      {
-        "email": "user3@example.com",
-        "success": false,
-        "error": "Duplicate email"
-      }
+      {"email": "user1@example.com", "success": true},
+      {"email": "user2@example.com", "success": true},
+      {"email": "user3@example.com", "success": false, "error": "Duplicate email"}
     ]
   }
 }
 ```
 
----
-
-### `statsResponseSchema`
-
-Response for stats endpoint.
-
-```typescript
-{
-  success: true;
-  data: {
-    total: number;           // Total signups in sheet tab
-    sheetTab: string;        // Sheet tab name
-    lastSignup: string;      // ISO 8601 timestamp of last signup
-  };
-}
-```
-
-**Example**:
+### Stats Response
 
 ```json
 {
@@ -240,137 +89,58 @@ Response for stats endpoint.
 }
 ```
 
----
-
-### `healthResponseSchema`
-
-Response for health check endpoint.
-
-```typescript
-{
-  status: "ok";
-  timestamp: string;  // ISO 8601 format
-}
-```
-
-**Example**:
+### Health Response
 
 ```json
-{
-  "status": "ok",
-  "timestamp": "2025-01-12T10:30:00.000Z"
-}
+{"status": "ok", "timestamp": "2025-01-12T10:30:00.000Z"}
 ```
 
----
-
-## Error Schemas
-
-### `errorResponseSchema`
-
-Standard error response format.
-
-```typescript
-{
-  success: false;
-  error: string;           // Error type
-  message: string;         // Human-readable message
-  details?: Record<string, unknown>;  // Additional error details
-}
-```
-
-**Example - Validation Error**:
+### Error Response
 
 ```json
 {
   "success": false,
   "error": "Validation error",
   "message": "email: Invalid email address",
-  "details": {
-    "email": "Invalid email address"
-  }
+  "details": {"email": "Invalid email address"}
 }
 ```
-
-**Example - Duplicate Email**:
-
-```json
-{
-  "success": false,
-  "error": "Duplicate email",
-  "message": "This email is already signed up",
-  "details": {
-    "email": "user@example.com"
-  }
-}
-```
-
----
 
 ## Validation Rules
 
-### Email Validation
+### Email
 
-Emails are validated using a strict regex pattern:
+Pattern: `^[^\s@]+@[^\s@]+\.[^\s@]+$`
 
-```typescript
-/^[^\s@]+@[^\s@]+\.[^\s@]+$/
-```
-
-**Requirements**:
-- Must contain exactly one `@` symbol
-- Must have at least one character before `@`
+- Must contain exactly one `@` with characters before and after
 - Must have at least one `.` after `@`
-- No whitespace allowed
+- No whitespace
+- Max 254 characters
+- Automatically lowercased and trimmed
 
-**Valid Examples**:
-- `user@example.com`
-- `user.name@example.com`
-- `user+tag@example.co.uk`
+### Field Limits
 
-**Invalid Examples**:
-- `user@` (missing domain)
-- `@example.com` (missing user)
-- `user example.com` (missing `@`)
-- `user@.com` (invalid domain)
-
-### String Length Limits
-
-| Field | Max Length |
-|-------|------------|
-| `email` | 255 characters |
+| Field | Max |
+|-------|-----|
+| `email` | 254 characters |
 | `name` | 100 characters |
 | `source` | 50 characters |
 | `sheetTab` | 100 characters |
-| `tags[i]` | 50 characters each |
+| `tags` item | 50 characters |
+| `tags` array | 50 items |
+| `signups` array | 100 items |
 
-### Array Limits
-
-| Array | Max Items |
-|-------|-----------|
-| `tags` | 50 items |
-| `signups` (bulk) | 100 items |
-
----
-
-## Using Schemas in TypeScript
-
-The schemas are exported and can be used for type inference:
+## TypeScript Usage
 
 ```typescript
 import {
   signupSchema,
-  signupExtendedSchema,
+  extendedSignupSchema,
   bulkSignupSchema,
   type SignupInput,
-  type SignupExtendedInput,
+  type ExtendedSignupInput,
   type BulkSignupInput,
 } from './schemas/signup.js';
-
-// Type inference from schemas
-type Signup = z.infer<typeof signupSchema>;
-type SignupExtended = z.infer<typeof signupExtendedSchema>;
-type BulkSignup = z.infer<typeof bulkSignupSchema>;
 
 // Validate data
 const result = signupSchema.safeParse({
@@ -379,25 +149,18 @@ const result = signupSchema.safeParse({
 });
 
 if (result.success) {
-  // data is valid and typed
-  console.log(result.data.email);
+  console.log(result.data.email);  // typed
 } else {
-  // handle validation errors
   console.error(result.error);
 }
 ```
 
----
-
-## Custom Validation
-
-You can extend or modify schemas for custom validation:
+### Extending Schemas
 
 ```typescript
 import { z } from 'zod';
 
-// Custom email domain validation
-const customSignupSchema = signupSchema.extend({
+const customSchema = signupSchema.extend({
   email: z.string()
     .email()
     .refine(
@@ -405,46 +168,12 @@ const customSignupSchema = signupSchema.extend({
       'Email must be from yourdomain.com'
     ),
 });
-
-// Custom tag validation
-const customExtendedSchema = signupExtendedSchema.extend({
-  tags: z.array(z.string())
-    .min(1, 'At least one tag is required')
-    .max(5, 'Maximum 5 tags allowed')
-    .refine(
-      (tags) => tags.every((tag) => tag.length <= 20),
-      'Each tag must be 20 characters or less'
-    ),
-});
 ```
 
----
+## Exports
 
-## Schema Export Locations
+From `src/schemas/signup.ts`:
 
-All schemas are defined in:
+**Schemas**: `signupSchema`, `extendedSignupSchema`, `bulkSignupSchema`
 
-```
-src/schemas/signup.ts
-```
-
-Exported schemas:
-- `signupSchema`
-- `signupExtendedSchema`
-- `bulkSignupSchema`
-- `signupItemSchema`
-- `signupResponseSchema`
-- `bulkSignupResponseSchema`
-- `statsResponseSchema`
-- `healthResponseSchema`
-- `errorResponseSchema`
-
-Related types:
-- `SignupInput`
-- `SignupExtendedInput`
-- `BulkSignupInput`
-- `SignupResponse`
-- `BulkSignupResponse`
-- `StatsResponse`
-- `HealthResponse`
-- `ErrorResponse`
+**Types**: `SignupInput`, `ExtendedSignupInput`, `BulkSignupInput`, `SheetRowData`

@@ -1,62 +1,75 @@
 # Getting Started
 
-Get **subs** running locally in about 5 minutes.
+Get **subs** running in minutes. Three options from fastest to most flexible.
 
 ## Prerequisites
 
-- [Bun](https://bun.sh/) runtime
-- A Google account (for Google Sheets)
+- A Google account with a [service account and Sheet configured](/guide/google-sheets)
 
-## Install
+## 1. Cloudflare Workers (Recommended)
+
+No server to manage. Automatic HTTPS, 300+ edge locations, free tier of 100k requests/day.
+
+```bash
+git clone https://github.com/briansunter/subs.git
+cd subs && bun install
+bunx wrangler login
+bun run workers:secret GOOGLE_SHEET_ID
+bun run workers:secret GOOGLE_CREDENTIALS_EMAIL
+bun run workers:secret GOOGLE_PRIVATE_KEY
+bun run deploy:workers
+```
+
+Your API is live at `https://subs-api.YOUR_SUBDOMAIN.workers.dev`. See [Deployment](/guide/deployment#cloudflare-workers-recommended) for one-click deploy, custom domains, and monitoring.
+
+## 2. Docker
 
 ```bash
 git clone https://github.com/briansunter/subs.git
 cd subs
-bun install
+cp .env.example .env.production  # add your Google Sheets credentials
+docker compose up -d
 ```
 
-## Configure
-
-Copy the example environment file and add your credentials:
+Or build and run directly:
 
 ```bash
+docker build -t subs .
+docker run -d -p 3000:3000 --env-file .env.production --restart unless-stopped subs
+```
+
+Your API is at `http://localhost:3000`. See [Deployment](/guide/deployment#docker) for Docker Compose, reverse proxy, and production setup.
+
+## 3. Local Development
+
+Requires [Bun](https://bun.sh/) runtime.
+
+```bash
+git clone https://github.com/briansunter/subs.git
+cd subs && bun install
 cp .env.example .env
 ```
 
-Edit `.env`:
+Edit `.env` with your credentials:
 
 ```bash
-# Google Sheets (required)
 GOOGLE_SHEET_ID=your_sheet_id_here
 GOOGLE_CREDENTIALS_EMAIL=your-service-account@project-id.iam.gserviceaccount.com
 GOOGLE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nYour private key here\n-----END PRIVATE KEY-----\n"
-
-# CORS (use specific domains in production)
-ALLOWED_ORIGINS=*
 ```
 
-See [Configuration](/reference/configuration) for all options.
+Start the dev server:
 
-See [Google Sheets Setup](/guide/google-sheets) for how to create a service account and get credentials.
-
-## Run
-
-**Local development** (Bun with hot reload):
 ```bash
 bun run dev
 # http://localhost:3000
 ```
 
-**Cloudflare Workers development**:
-```bash
-cp .env.example .dev.vars  # Workers uses .dev.vars
-bun run dev:workers
-# http://localhost:8787
-```
+See [Configuration](/reference/configuration) for all environment variables.
 
 ## Verify
 
-Open `http://localhost:3000` to see the built-in signup form, or check the health endpoint:
+Check the health endpoint:
 
 ```bash
 curl http://localhost:3000/api/health

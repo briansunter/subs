@@ -14,7 +14,37 @@ Email signup API backed by Google Sheets. Deploy to Cloudflare Workers or Docker
 
 **[Documentation](https://briansunter.github.io/subs)** &#8226; **[API Reference](https://briansunter.github.io/subs/guide/api)** &#8226; **[Integration Guide](https://briansunter.github.io/subs/guide/integration)**
 
-## Quick Start
+## Deploy to Cloudflare Workers
+
+Click the deploy button above, or deploy manually:
+
+```bash
+bunx wrangler login
+bun run workers:secret GOOGLE_SHEET_ID
+bun run workers:secret GOOGLE_CREDENTIALS_EMAIL
+bun run workers:secret GOOGLE_PRIVATE_KEY
+bun run deploy:workers
+```
+
+Your API is live at `https://subs-api.YOUR_SUBDOMAIN.workers.dev` with automatic HTTPS, 300+ edge locations, and a free tier of 100k requests/day.
+
+## Docker
+
+```bash
+git clone https://github.com/briansunter/subs.git
+cd subs
+cp .env.example .env.production  # add your Google Sheets credentials
+docker compose up -d
+```
+
+Or build and run directly:
+
+```bash
+docker build -t subs .
+docker run -d -p 3000:3000 --env-file .env.production --restart unless-stopped subs
+```
+
+## Local Development
 
 ```bash
 git clone https://github.com/briansunter/subs.git
@@ -31,23 +61,7 @@ curl -X POST http://localhost:3000/api/signup \
   -d '{"email": "user@example.com", "sheetTab": "Sheet1"}'
 ```
 
-See the [Getting Started guide](https://briansunter.github.io/subs/guide/getting-started) for Google Sheets setup and configuration.
-
-## Deploy to Cloudflare Workers
-
-Click the deploy button above, or deploy manually:
-
-```bash
-bunx wrangler login
-bun run workers:secret GOOGLE_SHEET_ID
-bun run workers:secret GOOGLE_CREDENTIALS_EMAIL
-bun run workers:secret GOOGLE_PRIVATE_KEY
-bun run deploy:workers
-```
-
-Your API is live at `https://subs-api.YOUR_SUBDOMAIN.workers.dev` with automatic HTTPS, 300+ edge locations, and a free tier of 100k requests/day.
-
-Also works with **[Docker](https://briansunter.github.io/subs/guide/deployment#docker)**, **[Fly.io](https://briansunter.github.io/subs/guide/deployment#fly-io)**, **[Render](https://briansunter.github.io/subs/guide/deployment#render)**, or any VPS. See the [Deployment guide](https://briansunter.github.io/subs/guide/deployment).
+See the [Getting Started guide](https://briansunter.github.io/subs/guide/getting-started) for Google Sheets setup and configuration. Also works with **[Fly.io](https://briansunter.github.io/subs/guide/deployment#fly-io)**, **[Render](https://briansunter.github.io/subs/guide/deployment#render)**, or any VPS. See the [Deployment guide](https://briansunter.github.io/subs/guide/deployment).
 
 ## API
 

@@ -28,6 +28,31 @@ bun run deploy:workers
 
 Your API is live at `https://subs-api.YOUR_SUBDOMAIN.workers.dev` with automatic HTTPS, 300+ edge locations, and a free tier of 100k requests/day.
 
+## Embed
+
+Add the script and a target `div`:
+
+```html
+<script src="https://your-domain.com/embed.js"></script>
+<div id="signup"></div>
+<script>
+  SignupEmbed.create('#signup');
+</script>
+```
+
+Options: `showName` (boolean), `sheetTab` (string), `site` (string for multi-sheet setups).
+
+Or use a plain HTML form:
+
+```html
+<form action="https://your-domain.com/api/signup/form" method="POST">
+  <input type="email" name="email" required>
+  <button type="submit">Subscribe</button>
+</form>
+```
+
+See the [Integration guide](https://briansunter.github.io/subs/guide/integration) for all options, iframe mode, React/Vue/Svelte examples, and custom fetch.
+
 ## Docker
 
 ```bash
@@ -77,31 +102,6 @@ See the [Getting Started guide](https://briansunter.github.io/subs/guide/getting
 | `GET` | `/metrics` | Prometheus metrics |
 
 See the [API Reference](https://briansunter.github.io/subs/guide/api) for request/response details.
-
-## Embed
-
-Add the script and a target `div`:
-
-```html
-<script src="https://your-domain.com/embed.js"></script>
-<div id="signup"></div>
-<script>
-  SignupEmbed.create('#signup');
-</script>
-```
-
-Options: `showName` (boolean), `sheetTab` (string), `site` (string for multi-sheet setups).
-
-Or use a plain HTML form:
-
-```html
-<form action="https://your-domain.com/api/signup/form" method="POST">
-  <input type="email" name="email" required>
-  <button type="submit">Subscribe</button>
-</form>
-```
-
-See the [Integration guide](https://briansunter.github.io/subs/guide/integration) for all options, iframe mode, React/Vue/Svelte examples, and custom fetch.
 
 ## Development
 

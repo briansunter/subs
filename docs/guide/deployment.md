@@ -250,5 +250,5 @@ Set `LOG_LEVEL=warn` in production. Logs are structured JSON (Pino) and work wit
 ## Next Steps
 
 - **[Troubleshooting](/guide/troubleshooting)** - Common issues and solutions
-- **[API Reference](/guide/api)** - Complete API documentation
+- **[API Reference](/guide/api)** - All endpoints and schemas
 - **[Configuration](/reference/configuration)** - All environment variables

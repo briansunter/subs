@@ -16,12 +16,9 @@ export default defineConfig({
   themeConfig: {
     nav: [
       { text: "Guide", link: "/guide/getting-started" },
-      { text: "API Reference", link: "/guide/api" },
-      { text: "Integration", link: "/guide/integration" },
-      {
-        text: "GitHub",
-        link: "https://github.com/briansunter/subs",
-      },
+      { text: "Deploy", link: "/guide/deployment" },
+      { text: "API", link: "/guide/api" },
+      { text: "GitHub", link: "https://github.com/briansunter/subs" },
     ],
 
     sidebar: [
@@ -29,22 +26,18 @@ export default defineConfig({
         text: "Guide",
         items: [
           { text: "Getting Started", link: "/guide/getting-started" },
-          { text: "Google Sheets Setup", link: "/guide/google-sheets" },
-          { text: "Cloudflare Turnstile", link: "/guide/turnstile" },
-          { text: "Prometheus Metrics", link: "/guide/prometheus" },
-          { text: "HTML Form Integration", link: "/guide/integration" },
-          { text: "API Reference", link: "/guide/api" },
           { text: "Deployment", link: "/guide/deployment" },
+          { text: "Google Sheets Setup", link: "/guide/google-sheets" },
+          { text: "Embedding Forms", link: "/guide/integration" },
+          { text: "Cloudflare Turnstile", link: "/guide/turnstile" },
+          { text: "API Reference", link: "/guide/api" },
+          { text: "Prometheus Metrics", link: "/guide/prometheus" },
           { text: "Troubleshooting", link: "/guide/troubleshooting" },
         ],
       },
       {
         text: "Reference",
-        items: [
-          { text: "Configuration", link: "/reference/configuration" },
-          { text: "API Endpoints", link: "/reference/endpoints" },
-          { text: "Schemas", link: "/reference/schemas" },
-        ],
+        items: [{ text: "Configuration", link: "/reference/configuration" }],
       },
     ],
 

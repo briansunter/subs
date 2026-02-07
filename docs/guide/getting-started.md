@@ -33,17 +33,9 @@ GOOGLE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nYour private key here\n-----END
 
 # CORS (use specific domains in production)
 ALLOWED_ORIGINS=*
-
-# Optional
-DEFAULT_SHEET_TAB=Sheet1
-PORT=3000
-LOG_LEVEL=info
-ENABLE_METRICS=true
-
-# Cloudflare Turnstile (optional)
-CLOUDFLARE_TURNSTILE_SITE_KEY=your_site_key
-CLOUDFLARE_TURNSTILE_SECRET_KEY=your_secret_key
 ```
+
+See [Configuration](/reference/configuration) for all options.
 
 See [Google Sheets Setup](/guide/google-sheets) for how to create a service account and get credentials.
 
@@ -105,75 +97,13 @@ bun test test/integration   # integration tests
 bun test --coverage         # with coverage
 ```
 
-## Available Scripts
-
-| Command | Description |
-|---------|-------------|
-| `bun run dev` | Development server with hot reload |
-| `bun run start` | Production server |
-| `bun run dev:workers` | Cloudflare Workers dev server |
-| `bun run deploy:workers` | Deploy to Cloudflare Workers |
-| `bun run workers:tail` | Real-time logs from deployed Workers |
-| `bun run workers:secret` | Set a Workers secret |
-| `bun test` | Run all tests |
-| `bunx biome check .` | Lint |
-| `bunx biome check --write .` | Lint and auto-fix |
-| `bun run docs:dev` | Documentation dev server |
-| `bun run docs:build` | Build documentation |
-| `bun run docker:up` | Start with Docker Compose |
-
-## Code Quality
-
-The project uses [Biome](https://biomejs.dev/) for linting and formatting:
-
-```bash
-bunx biome check .          # check
-bunx biome check --write .  # auto-fix
-bunx biome format --write . # format
-```
-
-## Project Structure
-
-```
-subs/
-├── src/
-│   ├── config.ts              # Zod-validated environment config
-│   ├── app.ts                 # Elysia app factory (CORS, logging, security)
-│   ├── index.worker.ts        # Cloudflare Worker entry point
-│   ├── routes/
-│   │   ├── signup.elysia.ts   # Route definitions
-│   │   └── handlers.ts        # Business logic (DI via SignupContext)
-│   ├── schemas/
-│   │   └── signup.ts          # Zod request/response schemas
-│   ├── services/
-│   │   ├── sheets.ts          # Google Sheets API (jose JWT auth)
-│   │   ├── turnstile.ts       # Cloudflare Turnstile verification
-│   │   └── metrics.ts         # Prometheus metrics
-│   ├── plugins/
-│   │   ├── logging.ts         # Request/response logging
-│   │   ├── metrics.ts         # Metrics middleware
-│   │   └── security.ts        # Security headers
-│   └── utils/
-│       └── logger.ts          # Pino structured logging
-├── test/
-│   ├── unit/                  # Unit tests
-│   ├── integration/           # Integration tests (Elysia handle())
-│   ├── mocks/                 # Mock services
-│   └── helpers/               # Test app factory, request helpers
-├── docs/                      # VitePress documentation
-├── index.ts                   # Server entry point (Bun/Docker)
-├── wrangler.toml              # Cloudflare Workers config
-├── Dockerfile                 # Multi-stage Docker build
-└── package.json
-```
+See `package.json` for all available scripts.
 
 ## Next Steps
 
-1. **[Google Sheets Setup](/guide/google-sheets)** - Service account configuration
-2. **[Cloudflare Turnstile](/guide/turnstile)** - Invisible bot protection
-3. **[HTML Form Integration](/guide/integration)** - Embed forms on your website
-4. **[API Reference](/guide/api)** - All endpoints and schemas
-5. **[Deployment](/guide/deployment)** - Production deployment
+- **[Deployment](/guide/deployment)** - Production deployment
+- **[Embedding Forms](/guide/integration)** - Add signup forms to your site
+- **[API Reference](/guide/api)** - All endpoints and schemas
 
 ## Troubleshooting
 
@@ -183,4 +113,4 @@ subs/
 
 **Environment variables not loading**: Ensure `.env` is in the project root with no spaces around `=`.
 
-More help: [Troubleshooting guide](/guide/troubleshooting) | [GitHub Issues](https://github.com/briansunter/subs/issues)
+More help: [Troubleshooting](/guide/troubleshooting) | [GitHub Issues](https://github.com/briansunter/subs/issues)

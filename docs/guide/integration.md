@@ -1,62 +1,48 @@
-# HTML Form Integration
+# Embedding Signup Forms
 
-Embed the signup form on any website. Four options from simplest to most customizable.
+Add a signup form to any website. Four options from simplest to most customizable.
 
-## Option 1: Iframe Embed
+## Option 1: JS SDK (Recommended)
 
-The simplest approach - embed the built-in form as an iframe.
-
-```html
-<iframe
-  src="https://your-domain.com/"
-  width="100%"
-  height="300"
-  frameborder="0"
-></iframe>
-```
-
-Or use the embed script for more control:
+Include the script and point it at a `div`. The form is rendered inline on your page.
 
 ```html
 <script src="https://your-domain.com/embed.js"></script>
-<div id="signup-container"></div>
+<div id="signup"></div>
 <script>
-  SignupEmbed.iframe('#signup-container', {
-    width: '100%',
-    height: '350px',
+  SignupEmbed.create('#signup');
+</script>
+```
+
+### Options
+
+Pass an options object to customize behavior:
+
+```html
+<script src="https://your-domain.com/embed.js"></script>
+<div id="signup"></div>
+<script>
+  SignupEmbed.create('#signup', {
+    showName: true,         // show name field (default: true)
+    sheetTab: 'Newsletter', // target sheet tab
+    site: 'my-site',        // site name for multi-sheet setups
   });
 </script>
 ```
 
-Customize with URL parameters:
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `showName` | boolean | `true` | Show a name input field |
+| `sheetTab` | string | server default | Target sheet tab |
+| `site` | string | - | Site name for multi-sheet setups |
 
-| Parameter | Description | Example |
-|-----------|-------------|---------|
-| `api` | Custom API endpoint | `?api=/api/signup/extended` |
-| `redirect` | Redirect after signup | `?redirect=/thank-you` |
-| `sheetTab` | Default sheet tab | `?sheetTab=Newsletter` |
+The form handles submission, loading state, success/error messages, and form reset automatically. It POSTs to `/api/signup/extended` with `source: 'embed'` and `tags: ['web-form']`.
 
-## Option 2: Inline Form
+`SignupEmbed.inline()` is an alias for `SignupEmbed.create()`.
 
-Inject the form directly into your page:
+## Option 2: Direct HTML Form
 
-```html
-<script src="https://your-domain.com/embed.js"></script>
-<div id="signup-container"></div>
-<script>
-  SignupEmbed.inline('#signup-container', {
-    endpoint: '/api/signup/extended',
-    fields: ['email', 'name'],
-    submitText: 'Subscribe',
-    successMessage: 'Thanks for signing up!',
-    containerClass: 'my-signup-form',
-  });
-</script>
-```
-
-## Option 3: Direct POST
-
-Create your own HTML form:
+No JavaScript needed. Create a plain HTML form that POSTs directly:
 
 ```html
 <form action="https://your-domain.com/api/signup/form" method="POST">
@@ -67,9 +53,11 @@ Create your own HTML form:
 </form>
 ```
 
-## Option 4: JavaScript Fetch
+This uses the `/api/signup/form` endpoint which accepts `application/x-www-form-urlencoded`. Style the form however you like.
 
-Full control with fetch:
+## Option 3: Custom JavaScript
+
+Full control over the request and UI with `fetch`:
 
 ```html
 <form id="signup-form">
@@ -110,6 +98,48 @@ document.getElementById('signup-form').addEventListener('submit', async (e) => {
 });
 </script>
 ```
+
+## Option 4: Iframe Embed
+
+If you need full isolation (e.g., the form runs in its own styling context), use the iframe mode. This loads the built-in form page inside an iframe.
+
+```html
+<iframe
+  src="https://your-domain.com/"
+  width="100%"
+  height="520"
+  style="border: 0; max-width: 100%;"
+  title="Signup form"
+  loading="lazy"
+></iframe>
+```
+
+Or use the JS SDK's iframe helper:
+
+```html
+<script src="https://your-domain.com/embed.js"></script>
+<div id="signup"></div>
+<script>
+  SignupEmbed.iframe('#signup', {
+    width: '100%',
+    height: 520,
+    site: 'my-site',
+    sheetTab: 'Newsletter',
+    redirect: '/thank-you',
+  });
+</script>
+```
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `width` | string \| number | `'100%'` | Iframe width |
+| `height` | string \| number | `520` | Iframe height |
+| `site` | string | - | Site name for multi-sheet setups |
+| `sheetTab` | string | - | Target sheet tab |
+| `redirect` | string | - | Redirect URL after signup (same-origin only) |
+| `api` | string | `/api/signup/extended` | Custom API endpoint |
+
+For most use cases, **Option 1 (JS SDK)** is simpler and avoids iframe quirks like fixed height, cross-origin restrictions, and styling isolation.
 
 ---
 

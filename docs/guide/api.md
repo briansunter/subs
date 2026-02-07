@@ -304,8 +304,56 @@ ALLOWED_ORIGINS=https://yoursite.com,https://www.yoursite.com
 
 No built-in rate limiting. Use Cloudflare's rate limiting for Workers deployments, or a reverse proxy (Nginx, Caddy) for Docker/VPS.
 
+## TypeScript Usage
+
+```typescript
+import {
+  signupSchema,
+  extendedSignupSchema,
+  bulkSignupSchema,
+  type SignupInput,
+  type ExtendedSignupInput,
+  type BulkSignupInput,
+} from './schemas/signup.js';
+
+// Validate data
+const result = signupSchema.safeParse({
+  email: 'user@example.com',
+  sheetTab: 'Sheet1',
+});
+
+if (result.success) {
+  console.log(result.data.email);  // typed
+} else {
+  console.error(result.error);
+}
+```
+
+### Extending Schemas
+
+```typescript
+import { z } from 'zod';
+
+const customSchema = signupSchema.extend({
+  email: z.string()
+    .email()
+    .refine(
+      (email) => email.endsWith('@yourdomain.com'),
+      'Email must be from yourdomain.com'
+    ),
+});
+```
+
+### Exports
+
+From `src/schemas/signup.ts`:
+
+**Schemas**: `signupSchema`, `extendedSignupSchema`, `bulkSignupSchema`
+
+**Types**: `SignupInput`, `ExtendedSignupInput`, `BulkSignupInput`, `SheetRowData`
+
 ## Next Steps
 
-- **[HTML Form Integration](/guide/integration)** - Embed forms on your website
+- **[Embedding Forms](/guide/integration)** - Add signup forms to your site
 - **[Deployment](/guide/deployment)** - Deploy to production
 - **[Configuration](/reference/configuration)** - All environment variables

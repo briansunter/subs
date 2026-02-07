@@ -5,12 +5,12 @@
 ![Version](https://img.shields.io/npm/v/subs)
 ![License](https://img.shields.io/github/license/briansunter/subs)
 
-Email signup API that stores subscribers in Google Sheets. Deploys to Cloudflare Workers or Docker. Built with [ElysiaJS](https://elysiajs.com), TypeScript, and [Bun](https://bun.sh).
+Email signup API backed by Google Sheets. Deploy to Cloudflare Workers or Docker. Built with [ElysiaJS](https://elysiajs.com), TypeScript, and [Bun](https://bun.sh).
 
-- **Google Sheets storage** with automatic tab creation and deduplication
-- **Cloudflare Turnstile** invisible bot protection (no CAPTCHAs)
-- **Multiple embed options** - iframe, inline form, direct POST, or JS SDK
-- **Prometheus metrics**, structured logging, and health checks
+- **Google Sheets** - automatic tab creation, headers, and deduplication
+- **Bot protection** - Cloudflare Turnstile, invisible, no CAPTCHAs
+- **Embed anywhere** - JS SDK, HTML form, fetch API, or iframe
+- **Observability** - Prometheus metrics, structured logging, health checks
 
 **[Documentation](https://briansunter.github.io/subs)** &#8226; **[API Reference](https://briansunter.github.io/subs/guide/api)** &#8226; **[Integration Guide](https://briansunter.github.io/subs/guide/integration)**
 
@@ -33,17 +33,9 @@ curl -X POST http://localhost:3000/api/signup \
 
 See the [Getting Started guide](https://briansunter.github.io/subs/guide/getting-started) for Google Sheets setup and configuration.
 
-## Deploy
+## Deploy to Cloudflare Workers
 
-### Cloudflare Workers (recommended)
-
-Click the deploy button above, then set secrets in the Cloudflare dashboard:
-
-- `GOOGLE_SHEET_ID` - Your Google Sheet ID
-- `GOOGLE_CREDENTIALS_EMAIL` - Service account email
-- `GOOGLE_PRIVATE_KEY` - Service account private key
-
-Or deploy manually:
+Click the deploy button above, or deploy manually:
 
 ```bash
 bunx wrangler login
@@ -53,14 +45,9 @@ bun run workers:secret GOOGLE_PRIVATE_KEY
 bun run deploy:workers
 ```
 
-### Docker
+Your API is live at `https://subs-api.YOUR_SUBDOMAIN.workers.dev` with automatic HTTPS, 300+ edge locations, and a free tier of 100k requests/day.
 
-```bash
-cp .env.example .env  # configure credentials
-docker-compose up -d
-```
-
-See the [Deployment guide](https://briansunter.github.io/subs/guide/deployment) for custom domains, monitoring, and production configuration.
+Also works with **[Docker](https://briansunter.github.io/subs/guide/deployment#docker)**, **[Fly.io](https://briansunter.github.io/subs/guide/deployment#fly-io)**, **[Render](https://briansunter.github.io/subs/guide/deployment#render)**, or any VPS. See the [Deployment guide](https://briansunter.github.io/subs/guide/deployment).
 
 ## API
 
@@ -79,20 +66,28 @@ See the [API Reference](https://briansunter.github.io/subs/guide/api) for reques
 
 ## Embed
 
+Add the script and a target `div`:
+
 ```html
-<!-- iframe -->
 <script src="https://your-domain.com/embed.js"></script>
 <div id="signup"></div>
-<script>SignupEmbed.iframe('#signup');</script>
+<script>
+  SignupEmbed.create('#signup');
+</script>
+```
 
-<!-- or direct POST -->
+Options: `showName` (boolean), `sheetTab` (string), `site` (string for multi-sheet setups).
+
+Or use a plain HTML form:
+
+```html
 <form action="https://your-domain.com/api/signup/form" method="POST">
   <input type="email" name="email" required>
   <button type="submit">Subscribe</button>
 </form>
 ```
 
-See the [Integration guide](https://briansunter.github.io/subs/guide/integration) for React, Vue, Svelte examples and customization options.
+See the [Integration guide](https://briansunter.github.io/subs/guide/integration) for all options, iframe mode, React/Vue/Svelte examples, and custom fetch.
 
 ## Development
 

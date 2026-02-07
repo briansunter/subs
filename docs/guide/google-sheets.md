@@ -130,6 +130,7 @@ For high-volume use, consider queuing requests, caching results, or using a data
 
 ## Next Steps
 
+- **[Deployment](/guide/deployment)** - Deploy to production
 - **[Cloudflare Turnstile](/guide/turnstile)** - Invisible bot protection
-- **[HTML Form Integration](/guide/integration)** - Embed forms on your website
-- **[API Reference](/guide/api)** - Complete API documentation
+- **[Embedding Forms](/guide/integration)** - Add signup forms to your site
+- **[API Reference](/guide/api)** - All endpoints and schemas

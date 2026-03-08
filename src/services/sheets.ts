@@ -231,12 +231,7 @@ async function getSheetTabTitles(config: SignupConfig): Promise<string[]> {
  * Get all sheet tabs in the spreadsheet
  */
 async function getAllSheetTabs(config: SignupConfig): Promise<string[]> {
-  try {
-    return await getSheetTabTitles(config);
-  } catch (error) {
-    logger.error({ error }, "Failed to get sheet tabs");
-    return [config.defaultSheetTab];
-  }
+  return getSheetTabTitles(config);
 }
 
 /**
@@ -408,8 +403,7 @@ export async function emailExists(
     return false;
   } catch (error) {
     logger.error({ error, email }, "Failed to check if email exists");
-    // Don't throw error here, just return false to allow signup
-    return false;
+    throw new Error("Failed to check existing signups");
   }
 }
 

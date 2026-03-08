@@ -41,6 +41,7 @@ Add the script and a target `div`:
 ```
 
 Options: `showName` (boolean), `sheetTab` (string), `site` (string for multi-sheet setups).
+The SDK fetches `/api/config` and automatically renders Cloudflare Turnstile when both Turnstile keys are configured on the server.
 
 Or use a plain HTML form:
 
@@ -50,6 +51,8 @@ Or use a plain HTML form:
   <button type="submit">Subscribe</button>
 </form>
 ```
+
+If Turnstile is enabled, include Cloudflare's widget so the form submits `cf-turnstile-response`, or use the built-in SDK/iframe form which handles Turnstile automatically.
 
 See the [Integration guide](https://briansunter.github.io/subs/guide/integration) for all options, iframe mode, React/Vue/Svelte examples, and custom fetch.
 

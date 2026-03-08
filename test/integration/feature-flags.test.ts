@@ -144,10 +144,8 @@ describe("Feature Flags - Integration Tests", () => {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            signups: [
-              { email: "user1@example.com", turnstileToken: "valid-token" },
-              { email: "user2@example.com", turnstileToken: "valid-token" },
-            ],
+            turnstileToken: "valid-token",
+            signups: [{ email: "user1@example.com" }, { email: "user2@example.com" }],
           }),
         }),
       );

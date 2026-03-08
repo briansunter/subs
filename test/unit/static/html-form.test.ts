@@ -4,7 +4,7 @@
 
 import { beforeEach, expect, test } from "bun:test";
 import { clearConfigCache } from "../../../src/config";
-import { HTML_FORM_CONTENT } from "../../../src/static/html-form";
+import { getHtmlFormContent, HTML_FORM_CONTENT } from "../../../src/static/html-form";
 
 beforeEach(() => {
   clearConfigCache();
@@ -73,4 +73,50 @@ test("HTML_FORM_CONTENT should contain critical form elements", () => {
   expect(HTML_FORM_CONTENT).toContain('id="email"');
   expect(HTML_FORM_CONTENT).toContain('id="submitBtn"');
   expect(HTML_FORM_CONTENT).toContain('id="message"');
+});
+
+test("getHtmlFormContent should include Turnstile configuration when enabled", () => {
+  const html = getHtmlFormContent({
+    port: 3000,
+    host: "0.0.0.0",
+    googleSheetId: "sheet-id",
+    googleCredentialsEmail: "test@example.com",
+    googlePrivateKey: "private-key",
+    defaultSheetTab: "Newsletter",
+    turnstileSecretKey: "secret-key",
+    turnstileSiteKey: "site-key",
+    allowedOrigins: ["https://example.com"],
+    enableMetrics: true,
+    allowedSheets: new Map(),
+    sheetTabs: ["Newsletter", "Beta"],
+  });
+
+  expect(html).toContain('id="turnstileGroup"');
+  expect(html).toContain('id="turnstileContainer"');
+  expect(html).toContain("const turnstileRequired = true");
+  expect(html).toContain('"site-key"');
+});
+
+test("getHtmlFormContent should validate iframe api overrides", () => {
+  const html = getHtmlFormContent({
+    port: 3000,
+    host: "0.0.0.0",
+    googleSheetId: "sheet-id",
+    googleCredentialsEmail: "test@example.com",
+    googlePrivateKey: "private-key",
+    defaultSheetTab: "Sheet1",
+    turnstileSecretKey: undefined,
+    turnstileSiteKey: undefined,
+    allowedOrigins: ["*"],
+    enableMetrics: true,
+    allowedSheets: new Map(),
+    sheetTabs: ["Sheet1"],
+  });
+
+  expect(html).toContain("function isValidApiEndpoint");
+  expect(html).toContain(
+    "const apiEndpoint = isValidApiEndpoint(apiParam) ? apiParam : '/api/signup/extended';",
+  );
+  expect(html).toContain("if (url.startsWith('/') && !url.startsWith('//')) return true;");
+  expect(html).toContain("return endpointOrigin === window.location.origin;");
 });

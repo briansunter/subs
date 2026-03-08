@@ -48,6 +48,7 @@ Basic email signup.
 ```json
 {
   "success": true,
+  "statusCode": 200,
   "message": "Successfully signed up!"
 }
 ```
@@ -56,9 +57,8 @@ Basic email signup.
 ```json
 {
   "success": false,
-  "error": "Duplicate email",
-  "message": "This email is already signed up",
-  "details": {"email": "user@example.com"}
+  "statusCode": 409,
+  "error": "Email already registered"
 }
 ```
 
@@ -66,9 +66,9 @@ Basic email signup.
 ```json
 {
   "success": false,
-  "error": "Validation error",
-  "message": "email: Invalid email address",
-  "details": {"email": "Invalid email address"}
+  "statusCode": 400,
+  "error": "Validation failed",
+  "details": ["email: Invalid email format"]
 }
 ```
 
@@ -110,6 +110,7 @@ Signup with additional fields.
 ```json
 {
   "success": true,
+  "statusCode": 200,
   "message": "Successfully signed up!"
 }
 ```
@@ -129,34 +130,47 @@ Bulk signup for multiple emails (1-100 per request).
 **Request**:
 ```json
 {
+  "turnstileToken": "token-if-turnstile-is-enabled",
   "signups": [
     {"email": "user1@example.com"},
     {"email": "user2@example.com"}
-  ],
-  "sheetTab": "Import"
+  ]
 }
 ```
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `signups` | array | Yes | Array of signup objects (max 100) |
-| `sheetTab` | string | No | Target sheet tab |
+| `turnstileToken` | string | No | Required at the request level if Turnstile is configured |
 
-Each signup object accepts the same fields as `/api/signup`.
+Each signup object accepts the same fields as `/api/signup` except `turnstileToken`.
 
 **Success (200)**:
 ```json
 {
   "success": true,
-  "message": "Bulk signup processed",
+  "statusCode": 200,
+  "message": "Processed 2 signups",
   "data": {
-    "total": 2,
-    "successful": 2,
+    "success": 2,
     "failed": 0,
-    "results": [
-      {"email": "user1@example.com", "success": true},
-      {"email": "user2@example.com", "success": true}
-    ]
+    "duplicates": 0,
+    "errors": []
+  }
+}
+```
+
+**Partial success / duplicates (207)**:
+```json
+{
+  "success": false,
+  "statusCode": 207,
+  "message": "Processed signups (1 created, 1 duplicates, 1 failed)",
+  "data": {
+    "success": 1,
+    "failed": 1,
+    "duplicates": 1,
+    "errors": ["bad@example: Error: Failed to check existing signups"]
   }
 }
 ```
@@ -164,7 +178,7 @@ Each signup object accepts the same fields as `/api/signup`.
 ```bash
 curl -X POST http://localhost:3000/api/signup/bulk \
   -H "Content-Type: application/json" \
-  -d '{"signups": [{"email": "user1@example.com"}, {"email": "user2@example.com"}], "sheetTab": "Import"}'
+  -d '{"turnstileToken": "token-if-needed", "signups": [{"email": "user1@example.com"}, {"email": "user2@example.com"}]}'
 ```
 
 ---
@@ -181,6 +195,8 @@ HTML form submission endpoint. Accepts `application/x-www-form-urlencoded` or `m
 | `site` | string | No | Site name |
 | `source` | string | No | Signup source (default: `"form"`) |
 | `tags` | string | No | Comma-separated tags (default: `"form-submit"`) |
+| `turnstileToken` | string | No | Direct Turnstile token |
+| `cf-turnstile-response` | string | No | Cloudflare's default form field name |
 
 ```bash
 curl -X POST http://localhost:3000/api/signup/form \
@@ -251,11 +267,11 @@ Public configuration for frontend clients. Does not expose secrets.
 
 ### Email
 
-Emails are validated with: `^[^\s@]+@[^\s@]+\.[^\s@]+$`
+Emails are trimmed, lowercased, and validated with Zod's email validator.
 
-- Exactly one `@`, at least one `.` after `@`, no whitespace
 - Max 254 characters (RFC 5321)
-- Automatically lowercased and trimmed
+- Leading and trailing whitespace is removed before validation
+- Invalid or malformed addresses are rejected with `Validation failed`
 
 ### Field Limits
 
@@ -273,11 +289,11 @@ Emails are validated with: `^[^\s@]+@[^\s@]+\.[^\s@]+$`
 | Code | Description |
 |------|-------------|
 | `200` | Success |
+| `207` | Bulk request completed with duplicates or per-row failures |
 | `400` | Validation error |
 | `409` | Duplicate email |
 | `415` | Unsupported media type (form endpoint) |
 | `500` | Internal server error |
-| `503` | Google Sheets API error |
 
 ## Error Format
 
@@ -286,9 +302,9 @@ All errors follow this structure:
 ```json
 {
   "success": false,
+  "statusCode": 400,
   "error": "Error type",
-  "message": "Human-readable message",
-  "details": {}
+  "details": ["field: explanation"]
 }
 ```
 

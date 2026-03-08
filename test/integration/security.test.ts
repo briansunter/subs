@@ -74,11 +74,9 @@ describe.serial("Security Tests - Integration", () => {
           }),
         );
 
-        // The email validator might reject these as invalid format
-        // or accept them (they're stored as strings, not executed)
-        // Key is that they don't cause crashes or unexpected behavior
-        expect(response.status).toBeGreaterThanOrEqual(200);
-        expect(response.status).toBeLessThan(600);
+        const data = await parseJsonResponse<ApiResponse>(response);
+        expect(response.status).toBe(400);
+        expect(data.error).toBe("Validation failed");
       }
     });
 

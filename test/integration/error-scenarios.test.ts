@@ -172,12 +172,14 @@ describe.serial("Error Scenarios - Elysia Handle Tests", () => {
         new Request("http://localhost/api/signup/bulk", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ signups }),
+          body: JSON.stringify({
+            signups,
+            turnstileToken: VALID_TURNSTILE_TOKEN,
+          }),
         }),
       );
 
-      // Should accept max bulk size
-      expect([200, 500]).toContain(response.status);
+      expect(response.status).toBe(200);
     });
 
     test("should reject bulk signup with 101 items (exceeds max)", async () => {
@@ -237,7 +239,7 @@ describe.serial("Error Scenarios - Elysia Handle Tests", () => {
   });
 
   describe("Edge Cases and Boundary Conditions", () => {
-    test("should handle email with unicode characters", async () => {
+    test("should reject email with unicode characters", async () => {
       const app = await getTestApp();
 
       const response = await app.handle(
@@ -251,8 +253,7 @@ describe.serial("Error Scenarios - Elysia Handle Tests", () => {
         }),
       );
 
-      // Should handle unicode (validator accepts it)
-      expect([200, 400, 500]).toContain(response.status);
+      expect(response.status).toBe(400);
     });
 
     test("should handle email with plus sign", async () => {

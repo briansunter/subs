@@ -182,6 +182,37 @@ interface SignupData {
   metadata?: string;
 }
 
+interface BulkSignupResults {
+  success: number;
+  failed: number;
+  duplicates: number;
+  errors: string[];
+}
+
+function buildBulkSignupResponse(results: BulkSignupResults): HandlerResult {
+  const hasIssues = results.failed > 0 || results.duplicates > 0;
+  const parts: string[] = [];
+
+  if (results.success > 0) {
+    parts.push(`${results.success} created`);
+  }
+  if (results.duplicates > 0) {
+    parts.push(`${results.duplicates} duplicates`);
+  }
+  if (results.failed > 0) {
+    parts.push(`${results.failed} failed`);
+  }
+
+  return {
+    success: !hasIssues,
+    statusCode: hasIssues ? 207 : 200,
+    message: hasIssues
+      ? `Processed signups (${parts.join(", ")})`
+      : `Processed ${results.success} signups`,
+    data: results,
+  };
+}
+
 /**
  * Common signup processing flow
  * Handles validation, turnstile verification, duplicate checking, and storage
@@ -353,15 +384,15 @@ export async function handleBulkSignup(
   if (!validation.success) {
     return validation.result;
   }
-  const { signups } = validation.data;
+  const { signups, turnstileToken } = validation.data;
 
   try {
-    const results: {
-      success: number;
-      failed: number;
-      duplicates: number;
-      errors: string[];
-    } = {
+    const turnstileResult = await validateTurnstileToken(turnstileToken, ctx);
+    if (turnstileResult) {
+      return turnstileResult;
+    }
+
+    const results: BulkSignupResults = {
       success: 0,
       failed: 0,
       duplicates: 0,
@@ -381,8 +412,14 @@ export async function handleBulkSignup(
         // Check if email already exists
         const sheetsStartTime = Date.now();
         const resolvedConfig = { ...ctx.config, googleSheetId: siteResolution.sheetId };
-        const exists = await ctx.sheets.emailExists(signup.email, signup.sheetTab, resolvedConfig);
-        recordSheetsRequest("emailExists", true, (Date.now() - sheetsStartTime) / 1000);
+        let exists = false;
+        try {
+          exists = await ctx.sheets.emailExists(signup.email, signup.sheetTab, resolvedConfig);
+          recordSheetsRequest("emailExists", true, (Date.now() - sheetsStartTime) / 1000);
+        } catch (error) {
+          recordSheetsRequest("emailExists", false, (Date.now() - sheetsStartTime) / 1000);
+          throw error;
+        }
 
         if (exists) {
           results.duplicates++;
@@ -391,17 +428,22 @@ export async function handleBulkSignup(
 
         // Store in Google Sheets
         const appendStartTime = Date.now();
-        await ctx.sheets.appendSignup(
-          {
-            email: signup.email,
-            timestamp: new Date().toISOString(),
-            sheetTab: signup.sheetTab || ctx.config.defaultSheetTab,
-            sheetId: siteResolution.sheetId,
-            metadata: signup.metadata ? JSON.stringify(signup.metadata) : undefined,
-          },
-          resolvedConfig,
-        );
-        recordSheetsRequest("appendSignup", true, (Date.now() - appendStartTime) / 1000);
+        try {
+          await ctx.sheets.appendSignup(
+            {
+              email: signup.email,
+              timestamp: new Date().toISOString(),
+              sheetTab: signup.sheetTab || ctx.config.defaultSheetTab,
+              sheetId: siteResolution.sheetId,
+              metadata: signup.metadata ? JSON.stringify(signup.metadata) : undefined,
+            },
+            resolvedConfig,
+          );
+          recordSheetsRequest("appendSignup", true, (Date.now() - appendStartTime) / 1000);
+        } catch (error) {
+          recordSheetsRequest("appendSignup", false, (Date.now() - appendStartTime) / 1000);
+          throw error;
+        }
 
         results.success++;
       } catch (error) {
@@ -417,16 +459,10 @@ export async function handleBulkSignup(
     );
 
     const duration = (Date.now() - startTime) / 1000;
-    // Only record success if there were no failures
-    const wasSuccessful = results.failed === 0;
+    const response = buildBulkSignupResponse(results);
+    const wasSuccessful = response.success;
     recordSignup("/api/signup/bulk", wasSuccessful, duration);
-
-    return {
-      success: true,
-      statusCode: 200,
-      message: `Processed ${results.success} signups`,
-      data: results,
-    };
+    return response;
   } catch (error) {
     logger.error({ error }, "Bulk signup failed");
 

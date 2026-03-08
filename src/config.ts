@@ -14,6 +14,8 @@ const booleanEnv = (defaultValue = "true") =>
     .default(defaultValue)
     .transform((val) => val.toLowerCase() === "true");
 
+const logLevelSchema = z.enum(["fatal", "error", "warn", "info", "debug", "trace"]).default("info");
+
 /**
  * Zod schema for environment variable validation
  */
@@ -54,7 +56,7 @@ const envSchema = z.object({
 
   // Node environment
   NODE_ENV: z.string().default("development"),
-  LOG_LEVEL: z.string().default("info"),
+  LOG_LEVEL: logLevelSchema,
 
   // Feature flags
   ENABLE_METRICS: booleanEnv(),
@@ -80,7 +82,7 @@ const envSchema = z.object({
     .string()
     .optional()
     .transform((val) => {
-      if (!val) return ["Sheet1"];
+      if (!val) return undefined;
       return val
         .split(",")
         .map((s) => s.trim())
@@ -116,9 +118,9 @@ export interface SignupConfig {
   sheetTabs: string[];
 }
 
-function loadEnv(): SignupConfig {
+export function loadEnv(envSource: NodeJS.ProcessEnv = process.env): SignupConfig {
   // Parse and validate environment variables with Zod
-  const env = envSchema.parse(process.env);
+  const env = envSchema.parse(envSource);
 
   // Replace \n with actual newlines in private key
   const formattedPrivateKey = env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, "\n");
@@ -135,7 +137,7 @@ function loadEnv(): SignupConfig {
     allowedOrigins: env.ALLOWED_ORIGINS,
     enableMetrics: env.ENABLE_METRICS,
     allowedSheets: env.ALLOWED_SHEETS,
-    sheetTabs: env.SHEET_TABS,
+    sheetTabs: env.SHEET_TABS ?? [env.DEFAULT_SHEET_TAB],
   };
 }
 

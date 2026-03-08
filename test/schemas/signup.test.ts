@@ -20,13 +20,15 @@ describe("Signup Schema Validation", () => {
       }
     });
 
-    test("should reject email with leading/trailing whitespace", () => {
+    test("should trim and normalize email with leading/trailing whitespace", () => {
       const result = signupSchema.safeParse({
         email: "  TEST@EXAMPLE.COM  ",
       });
 
-      // Regex doesn't allow spaces in email
-      expect(result.success).toBe(false);
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.email).toBe("test@example.com");
+      }
     });
 
     test("should leave sheetTab undefined when not provided (default applied at handler level)", () => {
@@ -92,7 +94,7 @@ describe("Signup Schema Validation", () => {
         "user.name@example.com",
         "user+tag@example.com",
         "user123@test-domain.co.uk",
-        "a@b.c",
+        "a@b.co",
       ];
 
       for (const email of validEmails) {
@@ -182,11 +184,13 @@ describe("Signup Schema Validation", () => {
           { email: "user2@example.com", sheetTab: "Sheet2" },
           { email: "user3@example.com" },
         ],
+        turnstileToken: "token",
       });
 
       expect(result.success).toBe(true);
       if (result.success) {
         expect(result.data.signups).toHaveLength(3);
+        expect(result.data.turnstileToken).toBe("token");
       }
     });
 
@@ -244,14 +248,12 @@ describe("Signup Schema Validation", () => {
       expect(result.success).toBe(false);
     });
 
-    test("should accept email with script tag (regex doesn't validate chars beyond format)", () => {
+    test("should reject email with script tag", () => {
       const result = signupSchema.safeParse({
         email: "<script>alert('xss')</script>@example.com",
       });
 
-      // The regex only validates format, not content
-      // XSS prevention should be handled at the output layer
-      expect(result.success).toBe(true);
+      expect(result.success).toBe(false);
     });
 
     test("should handle very long email addresses", () => {

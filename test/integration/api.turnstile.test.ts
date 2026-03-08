@@ -87,20 +87,39 @@ describe.serial("Turnstile Integration Tests", () => {
     expect(response.status).toBeLessThan(500);
   });
 
-  test("POST /api/signup/bulk bypasses Turnstile", async () => {
+  test("POST /api/signup/bulk accepts a request-level Turnstile token", async () => {
     const app = await getTestApp();
     const response = await app.handle(
       new Request("http://localhost/api/signup/bulk", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          turnstileToken: VALID_TURNSTILE_TOKEN,
           signups: [{ email: "bulk1@example.com" }, { email: "bulk2@example.com" }],
         }),
       }),
     );
 
-    // Bulk operations bypass Turnstile by design
     expect(response.status).toBeGreaterThanOrEqual(200);
     expect(response.status).toBeLessThan(500);
+  });
+
+  test("POST /api/signup/bulk requires a Turnstile token when configured", async () => {
+    const app = await getTestApp();
+    const response = await app.handle(
+      new Request("http://localhost/api/signup/bulk", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          signups: [{ email: "bulk3@example.com" }],
+        }),
+      }),
+    );
+
+    const data = await parseJsonResponse<{ success: boolean; error?: string }>(response);
+
+    expect(response.status).toBe(400);
+    expect(data.success).toBe(false);
+    expect(data.error).toBe("Turnstile verification failed");
   });
 });

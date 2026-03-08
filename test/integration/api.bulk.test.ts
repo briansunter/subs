@@ -10,8 +10,20 @@ import {
   mockTurnstileService,
   parseJsonResponse,
   register,
+  VALID_TURNSTILE_TOKEN,
 } from "../helpers/test-app-elysia";
 import type { BulkApiResponse } from "../types";
+
+function createBulkRequest(body: Record<string, unknown>): Request {
+  return new Request("http://localhost/api/signup/bulk", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      turnstileToken: VALID_TURNSTILE_TOKEN,
+      ...body,
+    }),
+  });
+}
 
 describe("Bulk Signup API Integration Tests", () => {
   beforeEach(async () => {
@@ -26,99 +38,74 @@ describe("Bulk Signup API Integration Tests", () => {
       const app = await getTestApp();
 
       const response = await app.handle(
-        new Request("http://localhost/api/signup/bulk", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            signups: [
-              { email: "user1@example.com", sheetTab: "Sheet1" },
-              { email: "user2@example.com", sheetTab: "Sheet1" },
-              { email: "user3@example.com", sheetTab: "Sheet1" },
-            ],
-          }),
+        createBulkRequest({
+          signups: [
+            { email: "user1@example.com", sheetTab: "Sheet1" },
+            { email: "user2@example.com", sheetTab: "Sheet1" },
+            { email: "user3@example.com", sheetTab: "Sheet1" },
+          ],
         }),
       );
 
       const data = await parseJsonResponse<BulkApiResponse>(response);
 
-      // Will fail on sheets auth with test credentials
-      expect([200, 500]).toContain(response.status);
-
-      if (response.status === 200) {
-        expect(data.success).toBe(true);
-        expect(data.message).toContain("Processed");
-        expect(data.data).toBeDefined();
-        // Note: With test credentials, auth errors cause failures instead of successes
-        // Accept both 3 successes (real auth) and 3 failures (test credentials)
-        if (data.data?.success === 3) {
-          expect(data.data.failed).toBe(0);
-        } else if (data.data?.failed === 3) {
-          expect(data.data.success).toBe(0);
-        }
-      }
+      expect(response.status).toBe(200);
+      expect(data.success).toBe(true);
+      expect(data.message).toContain("Processed");
+      expect(data.data).toBeDefined();
+      expect(data.data?.success).toBe(3);
+      expect(data.data?.failed).toBe(0);
     });
 
     test("should handle signups with different sheet tabs", async () => {
       const app = await getTestApp();
 
       const response = await app.handle(
-        new Request("http://localhost/api/signup/bulk", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            signups: [
-              { email: "user1@example.com", sheetTab: "Sheet1" },
-              { email: "user2@example.com", sheetTab: "Sheet2" },
-              { email: "user3@example.com", sheetTab: "Sheet3" },
-            ],
-          }),
+        createBulkRequest({
+          signups: [
+            { email: "user1@example.com", sheetTab: "Sheet1" },
+            { email: "user2@example.com", sheetTab: "Sheet2" },
+            { email: "user3@example.com", sheetTab: "Sheet3" },
+          ],
         }),
       );
 
-      expect([200, 500]).toContain(response.status);
+      expect(response.status).toBe(200);
     });
 
     test("should handle signups with default sheet tab", async () => {
       const app = await getTestApp();
 
       const response = await app.handle(
-        new Request("http://localhost/api/signup/bulk", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            signups: [{ email: "user1@example.com" }, { email: "user2@example.com" }],
-          }),
+        createBulkRequest({
+          signups: [{ email: "user1@example.com" }, { email: "user2@example.com" }],
         }),
       );
 
-      expect([200, 500]).toContain(response.status);
+      expect(response.status).toBe(200);
     });
 
     test("should process signups with metadata", async () => {
       const app = await getTestApp();
 
       const response = await app.handle(
-        new Request("http://localhost/api/signup/bulk", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            signups: [
-              {
-                email: "user1@example.com",
-                sheetTab: "Sheet1",
-                metadata: { source: "test", referrer: "google" },
-              },
-              {
-                email: "user2@example.com",
-                sheetTab: "Sheet1",
-                metadata: { source: "test", referrer: "direct" },
-              },
-            ],
-          }),
+        createBulkRequest({
+          signups: [
+            {
+              email: "user1@example.com",
+              sheetTab: "Sheet1",
+              metadata: { source: "test", referrer: "google" },
+            },
+            {
+              email: "user2@example.com",
+              sheetTab: "Sheet1",
+              metadata: { source: "test", referrer: "direct" },
+            },
+          ],
         }),
       );
 
-      expect([200, 500]).toContain(response.status);
+      expect(response.status).toBe(200);
     });
 
     test("should handle exactly 100 signups (maximum allowed)", async () => {
@@ -129,15 +116,9 @@ describe("Bulk Signup API Integration Tests", () => {
         sheetTab: "Sheet1",
       }));
 
-      const response = await app.handle(
-        new Request("http://localhost/api/signup/bulk", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ signups }),
-        }),
-      );
+      const response = await app.handle(createBulkRequest({ signups }));
 
-      expect([200, 500]).toContain(response.status);
+      expect(response.status).toBe(200);
     });
   });
 
@@ -145,15 +126,7 @@ describe("Bulk Signup API Integration Tests", () => {
     test("should reject empty signups array", async () => {
       const app = await getTestApp();
 
-      const response = await app.handle(
-        new Request("http://localhost/api/signup/bulk", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            signups: [],
-          }),
-        }),
-      );
+      const response = await app.handle(createBulkRequest({ signups: [] }));
 
       expect(response.status).toBe(400);
       const data = await parseJsonResponse<BulkApiResponse>(response);
@@ -169,13 +142,7 @@ describe("Bulk Signup API Integration Tests", () => {
         sheetTab: "Sheet1",
       }));
 
-      const response = await app.handle(
-        new Request("http://localhost/api/signup/bulk", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ signups }),
-        }),
-      );
+      const response = await app.handle(createBulkRequest({ signups }));
 
       expect(response.status).toBe(400);
       const data = await parseJsonResponse<BulkApiResponse>(response);
@@ -187,12 +154,8 @@ describe("Bulk Signup API Integration Tests", () => {
       const app = await getTestApp();
 
       const response = await app.handle(
-        new Request("http://localhost/api/signup/bulk", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            signups: [{ email: "invalid-email", sheetTab: "Sheet1" }],
-          }),
+        createBulkRequest({
+          signups: [{ email: "invalid-email", sheetTab: "Sheet1" }],
         }),
       );
 
@@ -205,13 +168,7 @@ describe("Bulk Signup API Integration Tests", () => {
     test("should reject missing signups field", async () => {
       const app = await getTestApp();
 
-      const response = await app.handle(
-        new Request("http://localhost/api/signup/bulk", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({}),
-        }),
-      );
+      const response = await app.handle(createBulkRequest({}));
 
       expect(response.status).toBe(400);
       const data = await parseJsonResponse<BulkApiResponse>(response);
@@ -222,12 +179,8 @@ describe("Bulk Signup API Integration Tests", () => {
       const app = await getTestApp();
 
       const response = await app.handle(
-        new Request("http://localhost/api/signup/bulk", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            signups: ["not-an-object", "also-not-an-object"],
-          }),
+        createBulkRequest({
+          signups: ["not-an-object", "also-not-an-object"],
         }),
       );
 
@@ -240,12 +193,8 @@ describe("Bulk Signup API Integration Tests", () => {
       const app = await getTestApp();
 
       const response = await app.handle(
-        new Request("http://localhost/api/signup/bulk", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            signups: [{ sheetTab: "Sheet1" }],
-          }),
+        createBulkRequest({
+          signups: [{ sheetTab: "Sheet1" }],
         }),
       );
 
@@ -258,59 +207,48 @@ describe("Bulk Signup API Integration Tests", () => {
 
   describe("POST /api/signup/bulk - Edge Cases", () => {
     test("should handle all signups being duplicates", async () => {
-      // This test would need a mock to properly simulate duplicates
-      // For now, we test that the endpoint handles the request structure
       const app = await getTestApp();
 
       const response = await app.handle(
-        new Request("http://localhost/api/signup/bulk", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            signups: [
-              { email: "duplicate@example.com", sheetTab: "Sheet1" },
-              { email: "duplicate@example.com", sheetTab: "Sheet1" },
-              { email: "duplicate@example.com", sheetTab: "Sheet1" },
-            ],
-          }),
+        createBulkRequest({
+          signups: [
+            { email: "duplicate@example.com", sheetTab: "Sheet1" },
+            { email: "duplicate@example.com", sheetTab: "Sheet1" },
+            { email: "duplicate@example.com", sheetTab: "Sheet1" },
+          ],
         }),
       );
 
-      // Should process the request (even if sheets operations fail with test creds)
-      expect([200, 500]).toContain(response.status);
+      expect(response.status).toBe(207);
+      const data = await parseJsonResponse<BulkApiResponse>(response);
+      expect(data.success).toBe(false);
+      expect(data.data?.success).toBe(1);
+      expect(data.data?.duplicates).toBe(2);
     });
 
     test("should handle single signup", async () => {
       const app = await getTestApp();
 
       const response = await app.handle(
-        new Request("http://localhost/api/signup/bulk", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            signups: [{ email: "single@example.com", sheetTab: "Sheet1" }],
-          }),
+        createBulkRequest({
+          signups: [{ email: "single@example.com", sheetTab: "Sheet1" }],
         }),
       );
 
-      expect([200, 500]).toContain(response.status);
+      expect(response.status).toBe(200);
     });
 
     test("should handle signups with null/undefined values", async () => {
       const app = await getTestApp();
 
       const response = await app.handle(
-        new Request("http://localhost/api/signup/bulk", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            signups: [
-              {
-                email: "user1@example.com",
-                sheetTab: null,
-              },
-            ],
-          }),
+        createBulkRequest({
+          signups: [
+            {
+              email: "user1@example.com",
+              sheetTab: null,
+            },
+          ],
         }),
       );
 
@@ -322,12 +260,8 @@ describe("Bulk Signup API Integration Tests", () => {
 
       const longEmail = `a${"very".repeat(100)}long@example.com`;
       const response = await app.handle(
-        new Request("http://localhost/api/signup/bulk", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            signups: [{ email: longEmail, sheetTab: "Sheet1" }],
-          }),
+        createBulkRequest({
+          signups: [{ email: longEmail, sheetTab: "Sheet1" }],
         }),
       );
 
@@ -341,80 +275,62 @@ describe("Bulk Signup API Integration Tests", () => {
       const app = await getTestApp();
 
       const response = await app.handle(
-        new Request("http://localhost/api/signup/bulk", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            signups: [
-              { email: "user1@example.com", sheetTab: "Sheet1" },
-              { email: "user2@example.com", sheetTab: "Sheet1" },
-            ],
-          }),
+        createBulkRequest({
+          signups: [
+            { email: "user1@example.com", sheetTab: "Sheet1" },
+            { email: "user2@example.com", sheetTab: "Sheet1" },
+          ],
         }),
       );
 
       const data = await parseJsonResponse<BulkApiResponse>(response);
 
       // Check response structure
-      if (response.status === 200) {
-        expect(data).toHaveProperty("success");
-        expect(data).toHaveProperty("message");
-        expect(data).toHaveProperty("data");
-        expect(data.data).toHaveProperty("success");
-        expect(data.data).toHaveProperty("failed");
-        expect(data.data).toHaveProperty("duplicates");
-        expect(data.data).toHaveProperty("errors");
-      } else if (response.status === 500) {
-        expect(data).toHaveProperty("success");
-        expect(data).toHaveProperty("error");
-      }
+      expect(response.status).toBe(200);
+      expect(data).toHaveProperty("success");
+      expect(data).toHaveProperty("message");
+      expect(data).toHaveProperty("data");
+      expect(data.data).toHaveProperty("success");
+      expect(data.data).toHaveProperty("failed");
+      expect(data.data).toHaveProperty("duplicates");
+      expect(data.data).toHaveProperty("errors");
     });
 
     test("should include accurate counts in response data", async () => {
       const app = await getTestApp();
 
       const response = await app.handle(
-        new Request("http://localhost/api/signup/bulk", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            signups: [
-              { email: "user1@example.com", sheetTab: "Sheet1" },
-              { email: "user2@example.com", sheetTab: "Sheet1" },
-              { email: "user3@example.com", sheetTab: "Sheet1" },
-            ],
-          }),
+        createBulkRequest({
+          signups: [
+            { email: "user1@example.com", sheetTab: "Sheet1" },
+            { email: "user2@example.com", sheetTab: "Sheet1" },
+            { email: "user3@example.com", sheetTab: "Sheet1" },
+          ],
         }),
       );
 
       const data = await parseJsonResponse<BulkApiResponse>(response);
 
-      if (response.status === 200) {
-        expect(typeof data.data?.success).toBe("number");
-        expect(typeof data.data?.failed).toBe("number");
-        expect(typeof data.data?.duplicates).toBe("number");
-        expect(Array.isArray(data.data?.errors)).toBe(true);
+      expect(response.status).toBe(200);
+      expect(typeof data.data?.success).toBe("number");
+      expect(typeof data.data?.failed).toBe("number");
+      expect(typeof data.data?.duplicates).toBe("number");
+      expect(Array.isArray(data.data?.errors)).toBe(true);
 
-        // Total should equal input count
-        const total =
-          (data.data?.success ?? 0) + (data.data?.failed ?? 0) + (data.data?.duplicates ?? 0);
-        expect(total).toBe(3);
-      }
+      const total =
+        (data.data?.success ?? 0) + (data.data?.failed ?? 0) + (data.data?.duplicates ?? 0);
+      expect(total).toBe(3);
     });
 
     test("should aggregate errors from failed signups", async () => {
       const app = await getTestApp();
 
       const response = await app.handle(
-        new Request("http://localhost/api/signup/bulk", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            signups: [
-              { email: "invalid-email", sheetTab: "Sheet1" },
-              { email: "also-invalid", sheetTab: "Sheet1" },
-            ],
-          }),
+        createBulkRequest({
+          signups: [
+            { email: "invalid-email", sheetTab: "Sheet1" },
+            { email: "also-invalid", sheetTab: "Sheet1" },
+          ],
         }),
       );
 
@@ -436,18 +352,12 @@ describe("Bulk Signup API Integration Tests", () => {
       }));
 
       const startTime = Date.now();
-      const response = await app.handle(
-        new Request("http://localhost/api/signup/bulk", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ signups }),
-        }),
-      );
+      const response = await app.handle(createBulkRequest({ signups }));
       const duration = Date.now() - startTime;
 
       // Should complete within 5 seconds (even with test credentials causing auth failures)
       expect(duration).toBeLessThan(5000);
-      expect([200, 500]).toContain(response.status);
+      expect(response.status).toBe(200);
     });
   });
 });

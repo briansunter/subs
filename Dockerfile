@@ -42,7 +42,7 @@ LABEL prometheus.io.path="/metrics"
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s \
-  CMD ./subs-server --eval "fetch('http://localhost:3000/api/health').then(r => process.exit(r.ok ? 0 : 1))"
+  CMD bun --eval "fetch('http://localhost:3000/api/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
 
 # Run the compiled binary (fastest startup, no dependencies needed)
 CMD ["./subs-server"]

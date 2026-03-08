@@ -16,6 +16,7 @@ test("getEmbedScript should return valid JavaScript", () => {
 test("getEmbedScript should include API base URL", () => {
   const script = getEmbedScript("https://api.example.com");
   expect(script).toContain("https://api.example.com/");
+  expect(script).toContain("https://api.example.com/api/config");
   expect(script).toContain("https://api.example.com/api/signup/extended");
 });
 
@@ -40,6 +41,7 @@ test("getEmbedScript should handle form submission", () => {
   expect(script).toContain("addEventListener('submit'");
   expect(script).toContain("fetch(");
   expect(script).toContain("'Content-Type': 'application/json'");
+  expect(script).toContain("data.turnstileToken");
 });
 
 test("getEmbedScript should include error handling", () => {
@@ -47,6 +49,7 @@ test("getEmbedScript should include error handling", () => {
   expect(script).toContain("try {");
   expect(script).toContain("catch");
   expect(script).toContain("finally");
+  expect(script).toContain("Turnstile is still loading. Please try again.");
 });
 
 test("getEmbedScript should log when loaded", () => {
@@ -67,4 +70,5 @@ test("getEmbedScript should include inline form styles", () => {
   const script = getEmbedScript("https://api.example.com");
   expect(script).toContain(".signup-form-embed");
   expect(script).toContain("signup-embed-styles");
+  expect(script).toContain("challenges.cloudflare.com/turnstile/v0/api.js?render=explicit");
 });

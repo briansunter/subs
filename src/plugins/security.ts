@@ -70,13 +70,20 @@ export const securityPlugin = (app: Elysia, config: SignupConfig) =>
 
     // Filter and validate origins to prevent CSP injection
     const validOrigins = config.allowedOrigins.filter(isValidOrigin);
+    const frameAncestors = validOrigins.includes("*")
+      ? "*"
+      : `'self' ${validOrigins.filter((o: string) => o !== "*").join(" ")}`.trim();
+    const turnstileEnabled = Boolean(config.turnstileSecretKey || config.turnstileSiteKey);
+    const turnstileSource = "https://challenges.cloudflare.com";
 
     // Set Content Security Policy
     const csp = [
-      `frame-ancestors 'self' ${validOrigins.filter((o: string) => o !== "*").join(" ")}`,
+      `frame-ancestors ${frameAncestors}`,
       "default-src 'self'",
-      "script-src 'self' 'unsafe-inline'",
+      `script-src 'self' 'unsafe-inline'${turnstileEnabled ? ` ${turnstileSource}` : ""}`,
       "style-src 'self' 'unsafe-inline'",
+      `frame-src 'self'${turnstileEnabled ? ` ${turnstileSource}` : ""}`,
+      `connect-src 'self'${turnstileEnabled ? ` ${turnstileSource}` : ""}`,
     ].join("; ");
 
     set.headers["Content-Security-Policy"] = csp;

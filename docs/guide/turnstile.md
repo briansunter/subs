@@ -38,6 +38,8 @@ CLOUDFLARE_TURNSTILE_SECRET_KEY=0x4AAAAAxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
 To disable Turnstile, leave both variables empty or remove them.
 
+The built-in clients at `/`, `/embed.js`, and `/api/signup/form` automatically render and submit Turnstile when both keys are configured. Custom frontends should read `/api/config` to discover the public site key.
+
 ### 3. Add to Your Frontend
 
 ```html
@@ -55,18 +57,20 @@ The widget generates a `turnstileToken` that is sent with the form. The API veri
 ### JavaScript Example
 
 ```javascript
-// Render widget programmatically
-turnstile.render('#turnstile-container', {
-  sitekey: 'YOUR_SITE_KEY',
-  callback: (token) => {
-    // Include token in your API request
-    fetch('/api/signup', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, turnstileToken: token })
-    });
-  }
-});
+const config = await fetch('/api/config').then((response) => response.json());
+
+if (config.turnstileEnabled && config.turnstileSiteKey) {
+  turnstile.render('#turnstile-container', {
+    sitekey: config.turnstileSiteKey,
+    callback: (token) => {
+      fetch('/api/signup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, turnstileToken: token })
+      });
+    }
+  });
+}
 ```
 
 ### React Example
@@ -121,6 +125,14 @@ curl -X POST http://localhost:3000/api/signup \
   -d '{"email": "test@example.com", "turnstileToken": "valid-test-token"}'
 ```
 
+Bulk requests use a single request-level token:
+
+```bash
+curl -X POST http://localhost:3000/api/signup/bulk \
+  -H "Content-Type: application/json" \
+  -d '{"turnstileToken": "valid-test-token", "signups": [{"email": "a@example.com"}, {"email": "b@example.com"}]}'
+```
+
 ## Widget Customization
 
 ```html
@@ -140,7 +152,7 @@ Theme options: `light`, `dark`, `auto`
 
 **"Invalid Turnstile token"**: Token may be expired (5 min TTL), already used (single-use), or malformed. Check that the secret key matches the site key (same Turnstile site).
 
-**Widget not showing**: Verify the Turnstile script is loaded, the container div exists, and the site key is correct. Some ad blockers may interfere - test with them disabled.
+**Widget not showing**: Verify the Turnstile script is loaded, the container div exists, and the site key is correct. Some ad blockers may interfere. If `/api/config` reports `turnstileEnabled: true` but `turnstileSiteKey: null`, the server is enforcing Turnstile without a public key available to the browser.
 
 **Localhost not working**: Add `localhost` to your Turnstile site domains. Use `http://localhost`, not `http://127.0.0.1`.
 

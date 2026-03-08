@@ -6,6 +6,8 @@
 export const getEmbedScript = (apiBaseUrl: string): string => {
   return `
 (function() {
+  let turnstileScriptPromise = null;
+
   /**
    * Configuration options for SignupEmbed.create()
    * @typedef {Object} SignupOptions
@@ -17,6 +19,117 @@ export const getEmbedScript = (apiBaseUrl: string): string => {
    * @property {string|number} [width] - Iframe width (iframe mode)
    * @property {string|number} [height] - Iframe height (iframe mode)
    */
+
+  async function fetchPublicConfig() {
+    try {
+      const response = await fetch('${apiBaseUrl}/api/config');
+      if (!response.ok) {
+        return null;
+      }
+
+      return await response.json();
+    } catch (err) {
+      return null;
+    }
+  }
+
+  async function loadTurnstileScript() {
+    if (window.turnstile) {
+      return true;
+    }
+
+    if (turnstileScriptPromise) {
+      return turnstileScriptPromise;
+    }
+
+    turnstileScriptPromise = new Promise(function(resolve) {
+      const script = document.createElement('script');
+      script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
+      script.async = true;
+      script.defer = true;
+      script.onload = function() {
+        resolve(true);
+      };
+      script.onerror = function() {
+        resolve(false);
+      };
+      document.head.appendChild(script);
+    });
+
+    return turnstileScriptPromise;
+  }
+
+  async function initializeTurnstile(container, state) {
+    const publicConfig = await fetchPublicConfig();
+    state.required = Boolean(publicConfig && publicConfig.turnstileEnabled);
+    state.siteKey = publicConfig && publicConfig.turnstileSiteKey ? publicConfig.turnstileSiteKey : null;
+
+    if (!state.required) {
+      return;
+    }
+
+    container.style.display = 'block';
+
+    if (!state.siteKey) {
+      state.loadError = 'Turnstile is required but not fully configured.';
+      container.textContent = state.loadError;
+      container.className = 'signup-turnstile signup-error-note';
+      return;
+    }
+
+    const loaded = await loadTurnstileScript();
+    if (!loaded || !window.turnstile) {
+      state.loadError = 'Failed to load Turnstile. Please refresh and try again.';
+      container.textContent = state.loadError;
+      container.className = 'signup-turnstile signup-error-note';
+      return;
+    }
+
+    container.className = 'signup-turnstile';
+    container.textContent = '';
+    state.widgetId = window.turnstile.render(container, {
+      sitekey: state.siteKey,
+      callback: function(token) {
+        state.token = token;
+      },
+      'expired-callback': function() {
+        state.token = null;
+      },
+      'error-callback': function() {
+        state.token = null;
+      }
+    });
+  }
+
+  function getTurnstileToken(state) {
+    if (!state.required) {
+      return { token: null };
+    }
+
+    if (state.loadError) {
+      return { error: state.loadError };
+    }
+
+    if (!window.turnstile || state.widgetId === null || state.widgetId === undefined) {
+      return { error: 'Turnstile is still loading. Please try again.' };
+    }
+
+    const token = window.turnstile.getResponse(state.widgetId);
+    if (!token) {
+      return { error: 'Please complete the Turnstile check.' };
+    }
+
+    return { token: token };
+  }
+
+  function resetTurnstile(state) {
+    if (!state.required || !window.turnstile || state.widgetId === null || state.widgetId === undefined) {
+      return;
+    }
+
+    window.turnstile.reset(state.widgetId);
+    state.token = null;
+  }
 
   /**
    * Create an inline signup form
@@ -98,6 +211,16 @@ export const getEmbedScript = (apiBaseUrl: string): string => {
           background: #f8d7da;
           color: #721c24;
         }
+        .signup-form-embed .signup-turnstile {
+          margin-bottom: 10px;
+        }
+        .signup-form-embed .signup-error-note {
+          background: #fff3cd;
+          color: #856404;
+          font-size: 12px;
+          padding: 10px;
+          border-radius: 4px;
+        }
       \`;
       document.head.appendChild(styleEl);
     }
@@ -137,6 +260,11 @@ export const getEmbedScript = (apiBaseUrl: string): string => {
       form.appendChild(siteInput);
     }
 
+    const turnstileContainer = document.createElement('div');
+    turnstileContainer.className = 'signup-turnstile';
+    turnstileContainer.style.display = 'none';
+    form.appendChild(turnstileContainer);
+
     const submitBtn = document.createElement('button');
     submitBtn.type = 'submit';
     submitBtn.textContent = 'Sign Up';
@@ -149,8 +277,18 @@ export const getEmbedScript = (apiBaseUrl: string): string => {
 
     container.appendChild(form);
 
+    const turnstileState = {
+      required: false,
+      siteKey: null,
+      widgetId: null,
+      loadError: null,
+      token: null
+    };
+    const turnstileReady = initializeTurnstile(turnstileContainer, turnstileState);
+
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
+      await turnstileReady;
       const formData = new FormData(form);
       const data = {
         email: formData.get('email'),
@@ -171,6 +309,15 @@ export const getEmbedScript = (apiBaseUrl: string): string => {
       messageEl.style.display = 'none';
 
       try {
+        const turnstileResult = getTurnstileToken(turnstileState);
+        if (turnstileResult.error) {
+          throw new Error(turnstileResult.error);
+        }
+
+        if (turnstileResult.token) {
+          data.turnstileToken = turnstileResult.token;
+        }
+
         const response = await fetch('${apiBaseUrl}/api/signup/extended', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -192,6 +339,7 @@ export const getEmbedScript = (apiBaseUrl: string): string => {
         messageEl.className = 'signup-message signup-error';
         messageEl.style.display = 'block';
       } finally {
+        resetTurnstile(turnstileState);
         submitBtn.disabled = false;
         submitBtn.textContent = 'Sign Up';
       }

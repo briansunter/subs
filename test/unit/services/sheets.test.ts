@@ -1007,14 +1007,14 @@ describe("Sheets Service - REST API Tests", () => {
       expect(valuesCall?.url).toContain("'Team''s%20List'!A%3AA");
     });
 
-    test("should return false on API errors gracefully", async () => {
+    test("should throw on API errors during duplicate checks", async () => {
       setMockFetch(async () => {
         return createMockResponse(500, { error: "API Error" });
       });
 
-      const exists = await emailExists("test@example.com", undefined, testConfig);
-
-      expect(exists).toBe(false); // Should return false, not throw
+      await expect(emailExists("test@example.com", undefined, testConfig)).rejects.toThrow(
+        "Failed to check existing signups",
+      );
     });
   });
 

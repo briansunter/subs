@@ -37,6 +37,7 @@ Pass an options object to customize behavior:
 | `site` | string | - | Site name for multi-sheet setups |
 
 The form handles submission, loading state, success/error messages, and form reset automatically. It POSTs to `/api/signup/extended` with `source: 'embed'` and `tags: ['web-form']`.
+When Turnstile is enabled, the SDK fetches `/api/config`, renders the widget automatically, and includes `turnstileToken` in the request.
 
 `SignupEmbed.inline()` is an alias for `SignupEmbed.create()`.
 
@@ -45,15 +46,17 @@ The form handles submission, loading state, success/error messages, and form res
 No JavaScript needed. Create a plain HTML form that POSTs directly:
 
 ```html
+<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
 <form action="https://your-domain.com/api/signup/form" method="POST">
   <input type="email" name="email" placeholder="Email" required>
   <input type="text" name="name" placeholder="Name">
   <input type="hidden" name="sheetTab" value="Newsletter">
+  <div class="cf-turnstile" data-sitekey="YOUR_SITE_KEY"></div>
   <button type="submit">Subscribe</button>
 </form>
 ```
 
-This uses the `/api/signup/form` endpoint which accepts `application/x-www-form-urlencoded`. Style the form however you like.
+This uses the `/api/signup/form` endpoint which accepts `application/x-www-form-urlencoded`. If Turnstile is disabled you can omit the widget; if it is enabled, submit either `cf-turnstile-response` or `turnstileToken`. Style the form however you like.
 
 ## Option 3: Custom JavaScript
 
@@ -99,6 +102,8 @@ document.getElementById('signup-form').addEventListener('submit', async (e) => {
 </script>
 ```
 
+If Turnstile is enabled, fetch `/api/config`, render Turnstile with the returned `turnstileSiteKey`, and send the resulting `turnstileToken` with your JSON payload.
+
 ## Option 4: Iframe Embed
 
 If you need full isolation (e.g., the form runs in its own styling context), use the iframe mode. This loads the built-in form page inside an iframe.
@@ -137,7 +142,7 @@ Or use the JS SDK's iframe helper:
 | `site` | string | - | Site name for multi-sheet setups |
 | `sheetTab` | string | - | Target sheet tab |
 | `redirect` | string | - | Redirect URL after signup (same-origin only) |
-| `api` | string | `/api/signup/extended` | Custom API endpoint |
+| `api` | string | `/api/signup/extended` | Relative or same-origin absolute custom API endpoint |
 
 For most use cases, **Option 1 (JS SDK)** is simpler and avoids iframe quirks like fixed height, cross-origin restrictions, and styling isolation.
 
@@ -265,17 +270,21 @@ const handleSubmit = async () => {
 
 ---
 
-## CORS
+## CORS and Embedding
 
-Your API's `ALLOWED_ORIGINS` must include your website's domain:
+`ALLOWED_ORIGINS` controls both API CORS and iframe embedding via CSP `frame-ancestors`. Add your website's domain when embedding on another origin:
 
 ```bash
 ALLOWED_ORIGINS=https://yoursite.com,https://www.yoursite.com
 ```
 
+`ALLOWED_ORIGINS=*` allows any site to embed the iframe form. That is convenient for testing but usually too broad for production.
+
 ## Troubleshooting
 
 **CORS error**: Add your domain to `ALLOWED_ORIGINS` in `.env` and restart the server.
+
+**Turnstile error**: Confirm both `CLOUDFLARE_TURNSTILE_SITE_KEY` and `CLOUDFLARE_TURNSTILE_SECRET_KEY` are configured. The built-in SDK and iframe form use `/api/config` to discover the public site key.
 
 **Form submits but no data**: Check the API URL, browser console for errors, and Network tab for the response. Verify Google Sheets credentials.
 

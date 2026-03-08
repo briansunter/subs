@@ -16,11 +16,11 @@ import { z } from "zod";
  */
 export const emailSchema = z
   .string()
+  .trim()
   .min(1, "Email is required")
   .max(254, "Email address is too long (max 254 characters)")
-  .regex(/^[^\s@]+@[^\s@]+\.[^\s@]+$/, "Invalid email format")
-  .toLowerCase()
-  .trim();
+  .email("Invalid email format")
+  .toLowerCase();
 
 /**
  * Base signup schema
@@ -45,11 +45,14 @@ export const extendedSignupSchema = signupSchema.extend({
 /**
  * Bulk signup schema
  */
+const bulkSignupItemSchema = signupSchema.omit({ turnstileToken: true });
+
 export const bulkSignupSchema = z.object({
   signups: z
-    .array(signupSchema)
+    .array(bulkSignupItemSchema)
     .min(1, "At least one signup is required")
     .max(100, "Cannot submit more than 100 signups at once"),
+  turnstileToken: z.string().optional(),
 });
 
 export type SignupInput = z.infer<typeof signupSchema>;

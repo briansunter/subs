@@ -354,7 +354,8 @@ describe("Route Handlers - Unit Tests", () => {
         mockContext,
       );
 
-      expect(result.success).toBe(true);
+      expect(result.success).toBe(false);
+      expect(result.statusCode).toBe(207);
       if (isBulkResultData(result.data)) {
         expect(result.data.duplicates).toBe(1);
         expect(result.data.failed).toBeGreaterThan(0);
@@ -374,7 +375,8 @@ describe("Route Handlers - Unit Tests", () => {
         mockContext,
       );
 
-      expect(result.success).toBe(true);
+      expect(result.success).toBe(false);
+      expect(result.statusCode).toBe(207);
       if (isBulkResultData(result.data)) {
         expect(result.data.duplicates).toBe(1);
         expect(result.data.success).toBe(1);
@@ -395,6 +397,27 @@ describe("Route Handlers - Unit Tests", () => {
 
       expect(result.success).toBe(false);
       expect(result.statusCode).toBe(400);
+    });
+
+    test("should require a request-level Turnstile token for bulk when configured", async () => {
+      const secureContext: SignupContext = {
+        ...mockContext,
+        config: {
+          ...mockContext.config,
+          turnstileSecretKey: "secret",
+        },
+      };
+
+      const result = await handleBulkSignup(
+        {
+          signups: [{ email: "bulk@example.com", sheetTab: "Sheet1" }],
+        },
+        secureContext,
+      );
+
+      expect(result.success).toBe(false);
+      expect(result.statusCode).toBe(400);
+      expect(result.error).toBe("Turnstile verification failed");
     });
 
     test("should check duplicates against each signup site sheet", async () => {
@@ -671,11 +694,11 @@ describe("Route Handlers - Unit Tests", () => {
       expect(sheetData[0]?.name).toBe("John O'Brien-Müller-Jørgen III");
     });
 
-    test("should handle unicode characters in email", async () => {
+    test("should reject unicode characters in email", async () => {
       const result = await handleSignup({ email: "test@例え.jp", sheetTab: "Sheet1" }, mockContext);
 
-      // Email validator accepts unicode, so this should pass validation
-      expect(result.success).toBe(true);
+      expect(result.success).toBe(false);
+      expect(result.statusCode).toBe(400);
     });
 
     test("should handle mixed case in sheet tab", async () => {

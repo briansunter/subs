@@ -113,7 +113,7 @@ export const createSignupRoutes = (
           // Config endpoint
           .get("/config", () => ({
             turnstileSiteKey: config.turnstileSiteKey ?? null,
-            turnstileEnabled: !!config.turnstileSiteKey,
+            turnstileEnabled: !!config.turnstileSecretKey,
             defaultSheetTab: config.defaultSheetTab,
             sheetTabs: config.sheetTabs,
           }))
@@ -184,6 +184,8 @@ export const createSignupRoutes = (
 
             // Convert form data to signup input
             const tagsValue = parsedForm["tags"];
+            const turnstileToken =
+              parsedForm["turnstileToken"] || parsedForm["cf-turnstile-response"];
             const signupData = {
               email: parsedForm["email"] || "",
               name: parsedForm["name"],
@@ -191,6 +193,7 @@ export const createSignupRoutes = (
               site: parsedForm["site"],
               source: parsedForm["source"] || "form",
               tags: tagsValue ? tagsValue.split(",").map((t) => t.trim()) : ["form-submit"],
+              turnstileToken,
             };
 
             const result = await handleExtendedSignup(signupData, context);

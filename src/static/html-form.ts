@@ -156,6 +156,17 @@ export function getHtmlFormContent(config: SignupConfig): string {
     .hidden {
       display: none;
     }
+    #turnstileGroup {
+      display: none;
+    }
+    .turnstile-note {
+      background: #fff3cd;
+      border: 1px solid #ffeeba;
+      border-radius: 8px;
+      color: #856404;
+      font-size: 13px;
+      padding: 12px;
+    }
   </style>
 </head>
 <body>
@@ -194,6 +205,10 @@ export function getHtmlFormContent(config: SignupConfig): string {
         </select>
       </div>
 
+      <div class="form-group" id="turnstileGroup">
+        <div id="turnstileContainer"></div>
+      </div>
+
       <button type="submit" id="submitBtn">
         <span id="btnText">Sign Up</span>
         <span id="btnLoading" class="loading hidden"></span>
@@ -209,13 +224,21 @@ export function getHtmlFormContent(config: SignupConfig): string {
     const btnText = document.getElementById('btnText');
     const btnLoading = document.getElementById('btnLoading');
     const messageEl = document.getElementById('message');
+    const turnstileGroup = document.getElementById('turnstileGroup');
+    const turnstileContainer = document.getElementById('turnstileContainer');
 
     // Get configuration from URL params
     const urlParams = new URLSearchParams(window.location.search);
-    const apiEndpoint = urlParams.get('api') || '/api/signup/extended';
+    const turnstileRequired = ${JSON.stringify(Boolean(config.turnstileSecretKey))};
+    const turnstileSiteKey = ${JSON.stringify(config.turnstileSiteKey ?? null)};
+    const apiParam = urlParams.get('api');
+    const apiEndpoint = isValidApiEndpoint(apiParam) ? apiParam : '/api/signup/extended';
     const redirectUrl = urlParams.get('redirect');
     const site = urlParams.get('site');
     const initialSheetTab = urlParams.get('sheetTab');
+    let turnstileScriptPromise = null;
+    let turnstileWidgetId = null;
+    let turnstileLoadError = null;
 
     if (initialSheetTab) {
       const sheetTabSelect = document.getElementById('sheetTab');
@@ -243,6 +266,106 @@ export function getHtmlFormContent(config: SignupConfig): string {
       }
     }
 
+    function isValidApiEndpoint(url) {
+      if (!url) return false;
+      if (url.startsWith('/') && !url.startsWith('//')) return true;
+      try {
+        const endpointOrigin = new URL(url, window.location.origin).origin;
+        return endpointOrigin === window.location.origin;
+      } catch {
+        return false;
+      }
+    }
+
+    async function loadTurnstileScript() {
+      if (!turnstileRequired) {
+        return false;
+      }
+
+      if (window.turnstile) {
+        return true;
+      }
+
+      if (turnstileScriptPromise) {
+        return turnstileScriptPromise;
+      }
+
+      turnstileScriptPromise = new Promise((resolve) => {
+        const script = document.createElement('script');
+        script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
+        script.async = true;
+        script.defer = true;
+        script.onload = () => resolve(true);
+        script.onerror = () => resolve(false);
+        document.head.appendChild(script);
+      });
+
+      return turnstileScriptPromise;
+    }
+
+    async function setupTurnstile() {
+      if (!turnstileRequired) {
+        return;
+      }
+
+      turnstileGroup.style.display = 'block';
+
+      if (!turnstileSiteKey) {
+        turnstileLoadError = 'Turnstile is required but not fully configured.';
+        turnstileContainer.textContent = turnstileLoadError;
+        turnstileContainer.className = 'turnstile-note';
+        return;
+      }
+
+      const loaded = await loadTurnstileScript();
+      if (!loaded || !window.turnstile) {
+        turnstileLoadError = 'Failed to load Turnstile. Please reload and try again.';
+        turnstileContainer.textContent = turnstileLoadError;
+        turnstileContainer.className = 'turnstile-note';
+        return;
+      }
+
+      turnstileContainer.className = '';
+      turnstileContainer.textContent = '';
+      turnstileWidgetId = window.turnstile.render(turnstileContainer, {
+        sitekey: turnstileSiteKey,
+        callback: () => {},
+        'expired-callback': () => {},
+        'error-callback': () => {},
+      });
+    }
+
+    function getTurnstileToken() {
+      if (!turnstileRequired) {
+        return null;
+      }
+
+      if (turnstileLoadError) {
+        throw new Error(turnstileLoadError);
+      }
+
+      if (!window.turnstile || turnstileWidgetId === null) {
+        throw new Error('Turnstile is still loading. Please try again.');
+      }
+
+      const token = window.turnstile.getResponse(turnstileWidgetId);
+      if (!token) {
+        throw new Error('Please complete the Turnstile check.');
+      }
+
+      return token;
+    }
+
+    function resetTurnstile() {
+      if (!turnstileRequired || !window.turnstile || turnstileWidgetId === null) {
+        return;
+      }
+
+      window.turnstile.reset(turnstileWidgetId);
+    }
+
+    const turnstileReady = setupTurnstile();
+
     function showLoading() {
       submitBtn.disabled = true;
       btnText.textContent = 'Signing up...';
@@ -259,6 +382,7 @@ export function getHtmlFormContent(config: SignupConfig): string {
 
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
+      await turnstileReady;
 
       const email = document.getElementById('email').value;
       const name = document.getElementById('name').value;
@@ -274,6 +398,11 @@ export function getHtmlFormContent(config: SignupConfig): string {
           source: 'embed',
           tags: ['web-form']
         };
+
+        const turnstileToken = getTurnstileToken();
+        if (turnstileToken) {
+          body.turnstileToken = turnstileToken;
+        }
 
         // Add site if provided
         if (site) {
@@ -312,9 +441,10 @@ export function getHtmlFormContent(config: SignupConfig): string {
           notifyParent('error', { error: data.error });
         }
       } catch (error) {
-        messageEl.textContent = 'Network error. Please try again.';
+        messageEl.textContent = error instanceof Error ? error.message : 'Network error. Please try again.';
         messageEl.className = 'message error show';
       } finally {
+        resetTurnstile();
         hideLoading();
       }
     });

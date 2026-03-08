@@ -71,8 +71,7 @@ test("securityPlugin should handle wildcard origin", async () => {
   const response = await app.handle(request);
 
   const csp = response.headers.get("Content-Security-Policy") || "";
-  // Wildcard should not be included in frame-ancestors
-  expect(csp).toContain("frame-ancestors 'self' ");
+  expect(csp).toContain("frame-ancestors *");
 });
 
 test("securityPlugin should remove X-Frame-Options header", async () => {
@@ -105,9 +104,7 @@ test("isValidOrigin should validate origin format", async () => {
   const response = await app.handle(request);
 
   const csp = response.headers.get("Content-Security-Policy") || "";
-  // Should include valid origins
-  expect(csp).toContain("https://example.com");
-  expect(csp).toContain("http://localhost:3000");
+  expect(csp).toContain("frame-ancestors *");
   // Should exclude invalid origin
   expect(csp).not.toContain("not-an-origin");
 });

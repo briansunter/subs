@@ -105,8 +105,12 @@ describe("Signup API Integration Tests", () => {
         }),
       );
 
-      // Will fail validation or sheets auth
-      expect([400, 200, 500]).toContain(response.status);
+      const data = await parseJsonResponse<ApiResponse>(response);
+
+      expect(response.status).toBe(200);
+      expect(data.success).toBe(true);
+      const sheetData = mockSheetsService.getSheetData("Sheet1");
+      expect(sheetData[0]?.email).toBe("test@example.com");
     });
 
     test("should accept metadata", async () => {
@@ -221,12 +225,13 @@ describe("Signup API Integration Tests", () => {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
+            turnstileToken: VALID_TURNSTILE_TOKEN,
             signups: [{ email: "user1@example.com" }, { email: "user2@example.com" }],
           }),
         }),
       );
 
-      expect([200, 500]).toContain(response.status);
+      expect(response.status).toBe(200);
     });
 
     test("should reject empty signups array", async () => {

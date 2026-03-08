@@ -50,6 +50,8 @@ HOST=127.0.0.1
 
 CORS allowed origins (comma-separated). Default: `*`
 
+This list also controls iframe embedding through CSP `frame-ancestors`.
+
 ```bash
 # Production
 ALLOWED_ORIGINS=https://yoursite.com,https://www.yoursite.com
@@ -100,7 +102,7 @@ ALLOWED_SHEETS=abc123:blog,def456:landing-page
 
 ### `SHEET_TABS`
 
-Available sheet tabs (comma-separated). Default: `Sheet1`
+Available sheet tabs (comma-separated). Default: `[DEFAULT_SHEET_TAB]`
 
 ```bash
 SHEET_TABS=Sheet1,Newsletter,Beta

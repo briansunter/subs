@@ -101,7 +101,11 @@ export const createSignupRoutes = (
       .group("/api", (app) =>
         app
           // Health check
-          .get("/health", () => handleHealthCheck().data)
+          .get("/health", ({ set }) => {
+            const result = handleHealthCheck();
+            if (result.statusCode) set.status = result.statusCode;
+            return result;
+          })
           // Stats endpoint
           .get("/stats", async ({ request, context, set }) => {
             const url = new URL(request.url);
@@ -117,8 +121,6 @@ export const createSignupRoutes = (
             defaultSheetTab: config.defaultSheetTab,
             sheetTabs: config.sheetTabs,
           }))
-          // Metrics endpoint (conditional on feature flag)
-          .get("/metrics", metricsHandler, metricsRouteOptions)
           // Basic signup
           .post(
             "/signup",

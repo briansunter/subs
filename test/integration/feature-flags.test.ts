@@ -59,7 +59,7 @@ describe("Feature Flags - Integration Tests", () => {
 
       const app = await getTestApp();
 
-      const response = await app.handle(new Request("http://localhost/api/metrics"));
+      const response = await app.handle(new Request("http://localhost/metrics"));
 
       // Should return 404 when disabled
       expect(response.status).toBe(404);
@@ -74,7 +74,7 @@ describe("Feature Flags - Integration Tests", () => {
 
       const app = await getTestApp();
 
-      const response = await app.handle(new Request("http://localhost/api/metrics"));
+      const response = await app.handle(new Request("http://localhost/metrics"));
 
       // Should return 200 when enabled
       expect(response.status).toBe(200);

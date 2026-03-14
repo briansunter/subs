@@ -30,7 +30,7 @@ beforeEach(async () => {
 describe("Metrics Endpoint", () => {
   test("should return metrics in Prometheus text format", async () => {
     const app = await getTestApp();
-    const response = await app.handle(createGetRequest("/api/metrics"));
+    const response = await app.handle(createGetRequest("/metrics"));
 
     expect(response.status).toBe(200);
     const contentType = response.headers.get("content-type");
@@ -43,7 +43,7 @@ describe("Metrics Endpoint", () => {
 
   test("should include default process metrics", async () => {
     const app = await getTestApp();
-    const response = await app.handle(createGetRequest("/api/metrics"));
+    const response = await app.handle(createGetRequest("/metrics"));
     const text = await response.text();
 
     expect(text).toContain("process_cpu_");
@@ -53,7 +53,7 @@ describe("Metrics Endpoint", () => {
   test("should return 404 for POST to metrics endpoint", async () => {
     const app = await getTestApp();
     const response = await app.handle(
-      new Request("http://localhost/api/metrics", {
+      new Request("http://localhost/metrics", {
         method: "POST",
       }),
     );
@@ -68,7 +68,7 @@ describe("HTTP Request Metrics", () => {
 
     await app.handle(createGetRequest("/api/health"));
 
-    const response = await app.handle(createGetRequest("/api/metrics"));
+    const response = await app.handle(createGetRequest("/metrics"));
     const text = await response.text();
 
     expect(text).toContain("http_requests_total");
@@ -86,7 +86,7 @@ describe("HTTP Request Metrics", () => {
       }),
     );
 
-    const response = await app.handle(createGetRequest("/api/metrics"));
+    const response = await app.handle(createGetRequest("/metrics"));
     const text = await response.text();
 
     expect(text).toContain("http_requests_total");
@@ -98,7 +98,7 @@ describe("HTTP Request Metrics", () => {
 
     await app.handle(createGetRequest("/api/health"));
 
-    const response = await app.handle(createGetRequest("/api/metrics"));
+    const response = await app.handle(createGetRequest("/metrics"));
     const text = await response.text();
 
     expect(text).toContain("http_request_duration_seconds_bucket");
@@ -116,7 +116,7 @@ describe("Signup Metrics", () => {
       }),
     );
 
-    const response = await app.handle(createGetRequest("/api/metrics"));
+    const response = await app.handle(createGetRequest("/metrics"));
     const text = await response.text();
 
     expect(text).toContain("signup_requests_total");
@@ -136,7 +136,7 @@ describe("Sheets API Metrics", () => {
       }),
     );
 
-    const response = await app.handle(createGetRequest("/api/metrics"));
+    const response = await app.handle(createGetRequest("/metrics"));
     const text = await response.text();
 
     expect(text).toContain("sheets_requests_total");
@@ -158,7 +158,7 @@ describe("Turnstile Metrics", () => {
       }),
     );
 
-    const response = await app.handle(createGetRequest("/api/metrics"));
+    const response = await app.handle(createGetRequest("/metrics"));
     const text = await response.text();
 
     expect(text).toContain("turnstile_requests_total");
@@ -172,7 +172,7 @@ describe("Metrics Labels", () => {
 
     await app.handle(createGetRequest("/api/health"));
 
-    const response = await app.handle(createGetRequest("/api/metrics"));
+    const response = await app.handle(createGetRequest("/metrics"));
     const text = await response.text();
 
     expect(text).toContain('method="GET"');
@@ -190,7 +190,7 @@ describe("Metrics Labels", () => {
       }),
     );
 
-    const response = await app.handle(createGetRequest("/api/metrics"));
+    const response = await app.handle(createGetRequest("/metrics"));
     const text = await response.text();
 
     expect(text).toContain('status_code="200"');

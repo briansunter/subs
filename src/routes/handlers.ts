@@ -449,7 +449,9 @@ export async function handleBulkSignup(
       } catch (error) {
         results.failed++;
         logger.error({ error, email: signup.email }, "Individual signup failed in bulk operation");
-        results.errors.push(`${signup.email}: ${String(error)}`);
+        results.errors.push(
+          `${signup.email}: ${error instanceof Error ? error.message : String(error)}`,
+        );
       }
     }
 

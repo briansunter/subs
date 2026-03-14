@@ -33,9 +33,12 @@ describe("Health Check - Basic Functionality (handle)", () => {
     const data = await parseJsonResponse<ApiResponse>(response);
 
     expect(response.status).toBe(200);
-    expect(data).toHaveProperty("status", "ok");
-    expect(data).toHaveProperty("timestamp");
-    expect(data.timestamp ? new Date(data.timestamp) : undefined).toBeDefined();
+    expect(data).toHaveProperty("success", true);
+    expect(data).toHaveProperty("statusCode", 200);
+    const healthData = data.data as { status: string; timestamp: string };
+    expect(healthData).toHaveProperty("status", "ok");
+    expect(healthData).toHaveProperty("timestamp");
+    expect(new Date(healthData.timestamp)).toBeDefined();
   });
 
   test("should respond quickly", async () => {
@@ -57,8 +60,12 @@ describe("Health Check - Response Format (handle)", () => {
     const data = await parseJsonResponse<ApiResponse>(response);
 
     expect(data).toMatchObject({
-      status: expect.any(String),
-      timestamp: expect.any(String),
+      success: true,
+      statusCode: 200,
+      data: {
+        status: expect.any(String),
+        timestamp: expect.any(String),
+      },
     });
   });
 
@@ -68,8 +75,9 @@ describe("Health Check - Response Format (handle)", () => {
     const response = await app.handle(createGetRequest("/api/health"));
     const data = await parseJsonResponse<ApiResponse>(response);
 
-    expect(data.timestamp && new Date(data.timestamp)).toBeTruthy();
-    expect(data.timestamp).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    const healthData = data.data as { status: string; timestamp: string };
+    expect(healthData.timestamp && new Date(healthData.timestamp)).toBeTruthy();
+    expect(healthData.timestamp).toMatch(/^\d{4}-\d{2}-\d{2}T/);
   });
 });
 
@@ -176,8 +184,9 @@ describe("Health Check - Service Dependencies (handle)", () => {
 
     const data = await parseJsonResponse<ApiResponse>(response);
 
-    expect(data).toHaveProperty("status");
-    // Future: expect(data).toHaveProperty("services");
+    const healthData = data.data as { status: string; timestamp: string };
+    expect(healthData).toHaveProperty("status");
+    // Future: expect(healthData).toHaveProperty("services");
   });
 });
 

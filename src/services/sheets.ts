@@ -163,6 +163,9 @@ async function sheetsRequest<T extends z.ZodTypeAny>(
     logger.info("Token expired, clearing cache and retrying");
     tokenCache = null;
 
+    // Consume the original response body to avoid connection leak
+    await response.text().catch(() => {});
+
     const newToken = await getAccessToken(config);
     const retryResponse = await fetch(url, {
       ...options,
@@ -225,13 +228,6 @@ async function getSheetTabTitles(config: SignupConfig): Promise<string[]> {
   }
 
   return titles;
-}
-
-/**
- * Get all sheet tabs in the spreadsheet
- */
-async function getAllSheetTabs(config: SignupConfig): Promise<string[]> {
-  return getSheetTabTitles(config);
 }
 
 /**
@@ -324,8 +320,6 @@ export async function appendSignup(
 
     const range = buildRange(data.sheetTab, "A:A");
 
-    // Email is already lowercased by Zod schema validation
-
     await sheetsRequest(
       `/spreadsheets/${sheetId}/values/${encodeURIComponent(range)}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
       ValueRangeSchema,
@@ -378,9 +372,8 @@ export async function emailExists(
     }
 
     // If sheetTab is specified, only check that tab
-    const tabsToCheck = sheetTab ? [sheetTab] : await getAllSheetTabs(config);
+    const tabsToCheck = sheetTab ? [sheetTab] : await getSheetTabTitles(config);
 
-    // Email is already lowercased by Zod schema validation
     const normalizedEmail = email.toLowerCase();
 
     for (const tab of tabsToCheck) {
@@ -392,7 +385,6 @@ export async function emailExists(
 
       const rows = result.values || [];
       for (const row of rows) {
-        // Compare lowercase since stored emails are lowercase
         if (row[0]?.toLowerCase() === normalizedEmail) {
           logger.info({ email: normalizedEmail, sheetTab: tab }, "Email already exists");
           return true;

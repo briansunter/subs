@@ -80,8 +80,9 @@ describe("Route Configuration", () => {
     const response = await app.handle(new Request("http://localhost/api/health"));
 
     expect(response.status).toBe(200);
-    const body = (await response.json()) as { status: string };
-    expect(body.status).toBe("ok");
+    const body = (await response.json()) as { success: boolean; data: { status: string } };
+    expect(body.success).toBe(true);
+    expect(body.data.status).toBe("ok");
   });
 
   test("should return stats at /api/stats", async () => {
@@ -125,23 +126,6 @@ describe("Feature Guards", () => {
       };
       const app = createSignupRoutes(disabledContext);
 
-      const response = await app.handle(new Request("http://localhost/api/metrics"));
-
-      expect(response.status).toBe(404);
-      const body = (await response.json()) as { error: string };
-      expect(body.error).toBe("Not found");
-    });
-
-    test("should return 404 at root metrics when metrics are disabled", async () => {
-      const disabledContext: SignupContext = {
-        ...mockContext,
-        config: {
-          ...mockContext.config,
-          enableMetrics: false,
-        },
-      };
-      const app = createSignupRoutes(disabledContext);
-
       const response = await app.handle(new Request("http://localhost/metrics"));
 
       expect(response.status).toBe(404);
@@ -150,15 +134,6 @@ describe("Feature Guards", () => {
     });
 
     test("should return metrics when enabled", async () => {
-      const app = createSignupRoutes(mockContext);
-
-      const response = await app.handle(new Request("http://localhost/api/metrics"));
-
-      expect(response.status).toBe(200);
-      expect(response.headers.get("Content-Type")).toContain("text/plain");
-    });
-
-    test("should return root metrics when enabled", async () => {
       const app = createSignupRoutes(mockContext);
 
       const response = await app.handle(new Request("http://localhost/metrics"));
@@ -217,13 +192,6 @@ describe("Content Type Headers", () => {
   });
 
   test("should return text/plain content type for metrics", async () => {
-    const app = createSignupRoutes(mockContext);
-    const response = await app.handle(new Request("http://localhost/api/metrics"));
-
-    expect(response.headers.get("Content-Type")).toContain("text/plain");
-  });
-
-  test("should return text/plain content type for root metrics", async () => {
     const app = createSignupRoutes(mockContext);
     const response = await app.handle(new Request("http://localhost/metrics"));
 

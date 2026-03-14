@@ -18,6 +18,8 @@ services:
       - GOOGLE_PRIVATE_KEY=${GOOGLE_PRIVATE_KEY}
       - DEFAULT_SHEET_TAB=${DEFAULT_SHEET_TAB:-Sheet1}
       - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL}
+      - CLOUDFLARE_TURNSTILE_SECRET_KEY=${CLOUDFLARE_TURNSTILE_SECRET_KEY}
+      - CLOUDFLARE_TURNSTILE_SITE_KEY=${CLOUDFLARE_TURNSTILE_SITE_KEY}
       - LOG_LEVEL=${LOG_LEVEL:-info}
     restart: unless-stopped
     healthcheck:
@@ -25,7 +27,7 @@ services:
       interval: 30s
       timeout: 3s
       retries: 3
-      start_period: 40s
+      start_period: 10s
     networks:
       - signup-network
 

@@ -73,7 +73,7 @@ export const securityPlugin = (app: Elysia, config: SignupConfig) =>
     const frameAncestors = validOrigins.includes("*")
       ? "*"
       : `'self' ${validOrigins.filter((o: string) => o !== "*").join(" ")}`.trim();
-    const turnstileEnabled = Boolean(config.turnstileSecretKey || config.turnstileSiteKey);
+    const turnstileEnabled = !!(config.turnstileSecretKey || config.turnstileSiteKey);
     const turnstileSource = "https://challenges.cloudflare.com";
 
     // Set Content Security Policy

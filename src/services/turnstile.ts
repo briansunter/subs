@@ -7,6 +7,8 @@ import { createChildLogger } from "../utils/logger";
 
 const logger = createChildLogger("turnstile");
 
+const TURNSTILE_SITEVERIFY_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverify";
+
 /**
  * Turnstile siteverify API response interface
  */
@@ -46,7 +48,7 @@ export async function verifyTurnstileToken(
   try {
     logger.debug("Verifying Turnstile token");
 
-    const response = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
+    const response = await fetch(TURNSTILE_SITEVERIFY_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

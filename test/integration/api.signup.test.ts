@@ -33,8 +33,10 @@ describe("Signup API Integration Tests", () => {
       const data = await parseJsonResponse<ApiResponse>(response);
 
       expect(response.status).toBe(200);
-      expect(data.status).toBe("ok");
-      expect(data.timestamp).toBeDefined();
+      expect(data.success).toBe(true);
+      const healthData = data.data as { status: string; timestamp: string };
+      expect(healthData.status).toBe("ok");
+      expect(healthData.timestamp).toBeDefined();
     });
   });
 

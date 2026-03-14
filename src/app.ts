@@ -94,13 +94,12 @@ export const createApp = (elysiaOptions?: Partial<ElysiaConfig<"">>, appConfig?:
           };
         }
 
-        // Handle other errors
-        const errorMessage = error instanceof Error ? error.message : "Internal server error";
+        // Handle other errors - use generic message to avoid leaking internals
         const statusCode = set.status || 500;
         return {
           success: false,
           statusCode,
-          error: errorMessage,
+          error: "Internal server error",
         };
       })
   );

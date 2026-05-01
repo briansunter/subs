@@ -30,12 +30,12 @@ const SpreadsheetSchema = z.object({
   ),
 });
 
+const SheetCellSchema = z.union([z.string(), z.number(), z.boolean(), z.null(), z.undefined()]);
+
 const ValueRangeSchema = z.object({
   range: z.string().optional(),
   majorDimension: z.string().optional(),
-  values: z
-    .union([z.array(z.array(z.union([z.string(), z.null(), z.undefined()]))), z.null()])
-    .optional(),
+  values: z.union([z.array(z.array(SheetCellSchema)), z.null()]).optional(),
 });
 
 const BatchUpdateResponseSchema = z.object({
@@ -52,6 +52,7 @@ const TokenResponseSchema = z.object({
 let tokenCache: {
   token: string;
   expiresAt: number;
+  credentialsEmail: string;
 } | null = null;
 
 /**
@@ -114,7 +115,11 @@ async function getAccessToken(config: SignupConfig): Promise<string> {
   const now = Math.floor(Date.now() / 1000);
 
   // Return cached token if still valid
-  if (tokenCache && tokenCache.expiresAt > now + TOKEN_EXPIRY_BUFFER) {
+  if (
+    tokenCache &&
+    tokenCache.credentialsEmail === config.googleCredentialsEmail &&
+    tokenCache.expiresAt > now + TOKEN_EXPIRY_BUFFER
+  ) {
     return tokenCache.token;
   }
 
@@ -130,6 +135,7 @@ async function getAccessToken(config: SignupConfig): Promise<string> {
   tokenCache = {
     token: tokenResponse.access_token,
     expiresAt: now + tokenResponse.expires_in,
+    credentialsEmail: config.googleCredentialsEmail,
   };
 
   logger.info("Access token obtained and cached");
@@ -385,7 +391,8 @@ export async function emailExists(
 
       const rows = result.values || [];
       for (const row of rows) {
-        if (row[0]?.toLowerCase() === normalizedEmail) {
+        const rowEmail = row[0];
+        if (typeof rowEmail === "string" && rowEmail.toLowerCase() === normalizedEmail) {
           logger.info({ email: normalizedEmail, sheetTab: tab }, "Email already exists");
           return true;
         }

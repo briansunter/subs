@@ -39,6 +39,7 @@ export interface ConfigResponse {
   turnstileSiteKey?: string | null;
   turnstileEnabled: boolean;
   defaultSheetTab: string;
+  sheetTabs: string[];
 }
 
 /**
@@ -48,8 +49,9 @@ export interface StatsResponse {
   success?: boolean;
   error?: string;
   data?: {
-    totalSignups: number;
-    sheetTabs: string[];
+    total: number;
+    sheetTab: string;
+    lastSignup: string | null;
   };
 }
 

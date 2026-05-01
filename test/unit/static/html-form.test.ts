@@ -87,6 +87,8 @@ test("getHtmlFormContent should include Turnstile configuration when enabled", (
     turnstileSiteKey: "site-key",
     allowedOrigins: ["https://example.com"],
     enableMetrics: true,
+    nodeEnv: "test",
+    logLevel: "silent",
     allowedSheets: new Map(),
     sheetTabs: ["Newsletter", "Beta"],
   });
@@ -109,6 +111,8 @@ test("getHtmlFormContent should validate iframe api overrides", () => {
     turnstileSiteKey: undefined,
     allowedOrigins: ["*"],
     enableMetrics: true,
+    nodeEnv: "test",
+    logLevel: "silent",
     allowedSheets: new Map(),
     sheetTabs: ["Sheet1"],
   });

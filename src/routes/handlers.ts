@@ -73,8 +73,8 @@ function resolveSiteToSheetId(
 /**
  * Default context with real services
  */
-export function createDefaultContext(): SignupContext {
-  const currentConfig = getConfig();
+export function createDefaultContext(config?: SignupConfig): SignupContext {
+  const currentConfig = config ?? getConfig();
   return {
     sheets: { appendSignup, emailExists, getSignupStats },
     turnstile: { verifyTurnstileToken },
@@ -189,6 +189,10 @@ interface BulkSignupResults {
   errors: string[];
 }
 
+function pluralize(count: number, singular: string, plural = `${singular}s`): string {
+  return `${count} ${count === 1 ? singular : plural}`;
+}
+
 function buildBulkSignupResponse(results: BulkSignupResults): HandlerResult {
   const hasIssues = results.failed > 0 || results.duplicates > 0;
   const parts: string[] = [];
@@ -197,7 +201,7 @@ function buildBulkSignupResponse(results: BulkSignupResults): HandlerResult {
     parts.push(`${results.success} created`);
   }
   if (results.duplicates > 0) {
-    parts.push(`${results.duplicates} duplicates`);
+    parts.push(pluralize(results.duplicates, "duplicate"));
   }
   if (results.failed > 0) {
     parts.push(`${results.failed} failed`);
@@ -398,6 +402,7 @@ export async function handleBulkSignup(
       duplicates: 0,
       errors: [],
     };
+    const successfulSignups = new Set<string>();
 
     for (const signup of signups) {
       try {
@@ -409,12 +414,24 @@ export async function handleBulkSignup(
           continue;
         }
 
+        const targetSheetTab = signup.sheetTab || ctx.config.defaultSheetTab;
+        const requestDedupeKey = [
+          siteResolution.sheetId,
+          targetSheetTab,
+          signup.email.toLowerCase(),
+        ].join("\0");
+
+        if (successfulSignups.has(requestDedupeKey)) {
+          results.duplicates++;
+          continue;
+        }
+
         // Check if email already exists
         const sheetsStartTime = Date.now();
         const resolvedConfig = { ...ctx.config, googleSheetId: siteResolution.sheetId };
         let exists = false;
         try {
-          exists = await ctx.sheets.emailExists(signup.email, signup.sheetTab, resolvedConfig);
+          exists = await ctx.sheets.emailExists(signup.email, targetSheetTab, resolvedConfig);
           recordSheetsRequest("emailExists", true, (Date.now() - sheetsStartTime) / 1000);
         } catch (error) {
           recordSheetsRequest("emailExists", false, (Date.now() - sheetsStartTime) / 1000);
@@ -433,7 +450,7 @@ export async function handleBulkSignup(
             {
               email: signup.email,
               timestamp: new Date().toISOString(),
-              sheetTab: signup.sheetTab || ctx.config.defaultSheetTab,
+              sheetTab: targetSheetTab,
               sheetId: siteResolution.sheetId,
               metadata: signup.metadata ? JSON.stringify(signup.metadata) : undefined,
             },
@@ -445,6 +462,7 @@ export async function handleBulkSignup(
           throw error;
         }
 
+        successfulSignups.add(requestDedupeKey);
         results.success++;
       } catch (error) {
         results.failed++;
@@ -456,7 +474,12 @@ export async function handleBulkSignup(
     }
 
     logger.info(
-      { total: results.success + results.failed, success: results.success, failed: results.failed },
+      {
+        total: results.success + results.failed + results.duplicates,
+        success: results.success,
+        failed: results.failed,
+        duplicates: results.duplicates,
+      },
       "Bulk signup processed",
     );
 

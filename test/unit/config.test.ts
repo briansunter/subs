@@ -71,6 +71,12 @@ describe("Configuration - Unit Tests", () => {
       );
     });
 
+    test("should throw error for partially numeric PORT values", () => {
+      expect(() => loadConfig({ PORT: "3000abc" })).toThrow(
+        "PORT must be a valid number between 1 and 65535",
+      );
+    });
+
     test("should replace \\n in private key with actual newlines", () => {
       const config = loadConfig({
         GOOGLE_PRIVATE_KEY: "-----BEGIN PRIVATE KEY-----\\ntest\\nkey\\n-----END PRIVATE KEY-----",
@@ -83,13 +89,13 @@ describe("Configuration - Unit Tests", () => {
 
     test("should parse ALLOWED_ORIGINS as array", () => {
       const config = loadConfig({
-        ALLOWED_ORIGINS: "https://example.com,https://test.com,localhost",
+        ALLOWED_ORIGINS: "https://example.com,https://test.com,http://localhost:3000",
       });
 
       expect(config.allowedOrigins).toEqual([
         "https://example.com",
         "https://test.com",
-        "localhost",
+        "http://localhost:3000",
       ]);
     });
 
@@ -161,6 +167,15 @@ describe("Configuration - Unit Tests", () => {
       const config = loadConfig({ SHEET_TABS: "Sheet1, Newsletter , Beta" });
 
       expect(config.sheetTabs).toEqual(["Sheet1", "Newsletter", "Beta"]);
+    });
+
+    test("should reject invalid sheet tab names", () => {
+      expect(() => loadConfig({ DEFAULT_SHEET_TAB: "../bad/tab" })).toThrow(
+        "Sheet tab name cannot contain",
+      );
+      expect(() => loadConfig({ SHEET_TABS: "Sheet1,Bad/Tab" })).toThrow(
+        "Sheet tab name cannot contain",
+      );
     });
   });
 
@@ -262,15 +277,35 @@ describe("Configuration - Unit Tests", () => {
       ).toThrow();
     });
 
-    test("should validate GOOGLE_SHEET_ID is not empty", () => {
-      // .min(1) should reject whitespace-only strings (trim is not used)
-      // Actually, .min(1) checks length, so "   " has length 3 and passes
-      const config = loadConfig({ GOOGLE_SHEET_ID: "   " });
-      expect(config.googleSheetId).toBe("   ");
+    test("should reject whitespace-only GOOGLE_SHEET_ID", () => {
+      expect(() => loadConfig({ GOOGLE_SHEET_ID: "   " })).toThrow();
     });
 
     test("should reject invalid LOG_LEVEL", () => {
       expect(() => loadConfig({ LOG_LEVEL: "verbose" })).toThrow();
+    });
+
+    test("should accept silent LOG_LEVEL", () => {
+      const config = loadConfig({ LOG_LEVEL: "silent" });
+      expect(config.logLevel).toBe("silent");
+    });
+
+    test("should trim and normalize LOG_LEVEL", () => {
+      const config = loadConfig({ LOG_LEVEL: " WARN " });
+      expect(config.logLevel).toBe("warn");
+    });
+
+    test("should reject invalid ENABLE_METRICS values", () => {
+      expect(() => loadConfig({ ENABLE_METRICS: "treu" })).toThrow("Expected true or false");
+    });
+
+    test("should reject malformed allowed origins", () => {
+      expect(() => loadConfig({ ALLOWED_ORIGINS: "https://example.com/path" })).toThrow(
+        "ALLOWED_ORIGINS contains invalid origin",
+      );
+      expect(() => loadConfig({ ALLOWED_ORIGINS: "" })).toThrow(
+        "ALLOWED_ORIGINS must include at least one origin or *",
+      );
     });
   });
 });

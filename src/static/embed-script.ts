@@ -151,14 +151,6 @@ export const getEmbedScript = (apiBaseUrl: string): string => {
     const site = options.site || '';
     const sheetTab = options.sheetTab || ''; // Empty = use server default
 
-    const nameField = showName ? \`
-      <input type="text" name="name" placeholder="Name (optional)" />
-    \` : '';
-
-    const siteInput = site ? \`
-      <input type="hidden" name="site" value="\${site}" />
-    \` : '';
-
     const styleId = 'signup-embed-styles';
     if (!document.getElementById(styleId)) {
       const styleEl = document.createElement('style');
@@ -325,9 +317,12 @@ export const getEmbedScript = (apiBaseUrl: string): string => {
         });
         const result = await response.json();
 
+        const firstDetail = Array.isArray(result.details) && result.details.length > 0
+          ? result.details[0]
+          : null;
         messageEl.textContent = result.success
           ? (result.message || 'Successfully signed up!')
-          : (result.error || 'An error occurred');
+          : (firstDetail || result.error || 'An error occurred');
         messageEl.className = 'signup-message ' + (result.success ? 'signup-success' : 'signup-error');
         messageEl.style.display = 'block';
 
@@ -335,7 +330,7 @@ export const getEmbedScript = (apiBaseUrl: string): string => {
           form.reset();
         }
       } catch (err) {
-        messageEl.textContent = 'Network error. Please try again.';
+        messageEl.textContent = err instanceof Error ? err.message : 'Network error. Please try again.';
         messageEl.className = 'signup-message signup-error';
         messageEl.style.display = 'block';
       } finally {
@@ -398,9 +393,11 @@ export const getEmbedScript = (apiBaseUrl: string): string => {
     iframe: iframe
   };
 
-  console.log('SignupEmbed loaded. Use SignupEmbed.create(selector, options)');
-  console.log('Also available: SignupEmbed.inline(selector, options), SignupEmbed.iframe(selector, options)');
-  console.log('Options: { site: string, sheetTab: string, showName: boolean, redirect: string, api: string }');
+  if (window.SignupEmbedDebug) {
+    console.log('SignupEmbed loaded. Use SignupEmbed.create(selector, options)');
+    console.log('Also available: SignupEmbed.inline(selector, options), SignupEmbed.iframe(selector, options)');
+    console.log('Options: { site: string, sheetTab: string, showName: boolean, redirect: string, api: string }');
+  }
 })();
   `;
 };

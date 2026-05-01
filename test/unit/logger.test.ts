@@ -4,7 +4,7 @@
  */
 
 import { beforeEach, describe, expect, test } from "bun:test";
-import { createChildLogger, logger } from "../../src/utils/logger";
+import { createChildLogger, logger, setLogLevel } from "../../src/utils/logger";
 
 // Store original env vars
 const originalEnv = { ...process.env };
@@ -39,6 +39,13 @@ describe("Logger - Unit Tests", () => {
     test("should have valid log level", () => {
       const validLevels = ["trace", "debug", "info", "warn", "error", "fatal", "silent"];
       expect(validLevels).toContain(logger.level);
+    });
+
+    test("should ignore invalid runtime log levels", () => {
+      const originalLevel = logger.level;
+      setLogLevel("invalid");
+      expect(logger.level).toBe("info");
+      setLogLevel(originalLevel);
     });
   });
 

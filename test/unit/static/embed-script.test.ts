@@ -52,8 +52,9 @@ test("getEmbedScript should include error handling", () => {
   expect(script).toContain("Turnstile is still loading. Please try again.");
 });
 
-test("getEmbedScript should log when loaded", () => {
+test("getEmbedScript should keep debug logging opt-in", () => {
   const script = getEmbedScript("https://api.example.com");
+  expect(script).toContain("window.SignupEmbedDebug");
   expect(script).toContain("console.log('SignupEmbed loaded");
 });
 

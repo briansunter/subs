@@ -39,8 +39,8 @@ Basic email signup.
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `email` | string | Yes | Valid email address |
-| `sheetTab` | string | No | Target sheet tab (default: `DEFAULT_SHEET_TAB`) |
-| `site` | string | No | Site name for multi-site support |
+| `sheetTab` | string | No | Target sheet tab (default: `DEFAULT_SHEET_TAB`, max 100 chars, cannot contain `: \ / ? * [ ]`) |
+| `site` | string | No | Site name for multi-site support (max 100 chars) |
 | `metadata` | object | No | Arbitrary key-value metadata |
 | `turnstileToken` | string | No | Required if Turnstile is configured |
 
@@ -98,11 +98,11 @@ Signup with additional fields.
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `email` | string | Yes | Valid email address |
-| `name` | string | No | User's name |
-| `source` | string | No | Signup source (default: `"api"`) |
-| `tags` | string[] | No | Tags (default: `[]`, max 50) |
-| `sheetTab` | string | No | Target sheet tab |
-| `site` | string | No | Site name for multi-site support |
+| `name` | string | No | User's name (max 200 chars) |
+| `source` | string | No | Signup source (default: `"api"`, max 100 chars) |
+| `tags` | string[] | No | Tags (default: `[]`, max 50 tags, 100 chars each) |
+| `sheetTab` | string | No | Target sheet tab (same restrictions as `/api/signup`) |
+| `site` | string | No | Site name for multi-site support (max 100 chars) |
 | `metadata` | object | No | Arbitrary key-value metadata |
 | `turnstileToken` | string | No | Required if Turnstile is configured |
 
@@ -235,7 +235,14 @@ curl "http://localhost:3000/api/stats?sheetTab=Sheet1"
 
 **Success (200)**:
 ```json
-{"status": "ok", "timestamp": "2025-01-12T10:30:00.000Z"}
+{
+  "success": true,
+  "statusCode": 200,
+  "data": {
+    "status": "ok",
+    "timestamp": "2025-01-12T10:30:00.000Z"
+  }
+}
 ```
 
 ---
@@ -278,10 +285,10 @@ Emails are trimmed, lowercased, and validated with Zod's email validator.
 | Field | Max Length |
 |-------|-----------|
 | `email` | 254 characters |
-| `name` | 100 characters |
-| `source` | 50 characters |
+| `name` | 200 characters |
+| `source` | 100 characters |
 | `sheetTab` | 100 characters |
-| `tags` | 50 items, 50 chars each |
+| `tags` | 50 items, 100 chars each |
 | `signups` (bulk) | 100 items |
 
 ## Status Codes
@@ -293,6 +300,7 @@ Emails are trimmed, lowercased, and validated with Zod's email validator.
 | `400` | Validation error |
 | `409` | Duplicate email |
 | `415` | Unsupported media type (form endpoint) |
+| `404` | Endpoint or disabled feature not found |
 | `500` | Internal server error |
 
 ## Error Format

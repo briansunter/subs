@@ -5,9 +5,10 @@
 
 import { getConfig } from "./src/config";
 import { createSignupRoutes } from "./src/routes/signup.elysia";
-import { logger } from "./src/utils/logger";
+import { logger, setLogLevel } from "./src/utils/logger";
 
 const config = getConfig();
+setLogLevel(config.nodeEnv === "test" ? "silent" : config.logLevel);
 const app = createSignupRoutes();
 
 // Start server

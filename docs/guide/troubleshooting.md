@@ -4,7 +4,7 @@
 
 ```bash
 curl http://localhost:3000/api/health
-# Expected: {"status": "ok", "timestamp": "..."}
+# Expected: {"success": true, "statusCode": 200, "data": {"status": "ok", "timestamp": "..."}}
 ```
 
 If the health check fails, the server isn't running. Check logs:

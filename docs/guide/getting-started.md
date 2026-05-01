@@ -76,7 +76,14 @@ curl http://localhost:3000/api/health
 ```
 
 ```json
-{"status": "ok", "timestamp": "2025-01-12T10:30:00.000Z"}
+{
+  "success": true,
+  "statusCode": 200,
+  "data": {
+    "status": "ok",
+    "timestamp": "2025-01-12T10:30:00.000Z"
+  }
+}
 ```
 
 ## Test a Signup
@@ -90,12 +97,8 @@ curl -X POST http://localhost:3000/api/signup \
 ```json
 {
   "success": true,
-  "message": "Signup added successfully",
-  "data": {
-    "email": "test@example.com",
-    "timestamp": "2025-01-12T10:30:00.000Z",
-    "sheetTab": "Sheet1"
-  }
+  "statusCode": 200,
+  "message": "Successfully signed up!"
 }
 ```
 

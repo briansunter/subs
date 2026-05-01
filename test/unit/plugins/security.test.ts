@@ -44,10 +44,14 @@ test("securityPlugin should include valid origins in CSP", async () => {
 });
 
 test("securityPlugin should filter invalid origins from CSP", async () => {
-  process.env["ALLOWED_ORIGINS"] =
-    "https://example.com,evil.com;script-src 'unsafe-eval',https://test.com";
-  clearConfigCache();
-  const config = getConfig();
+  const config = {
+    ...getConfig(),
+    allowedOrigins: [
+      "https://example.com",
+      "evil.com;script-src 'unsafe-eval'",
+      "https://test.com",
+    ],
+  };
   const app = new Elysia().use((app) => securityPlugin(app, config)).get("/", () => "Hello");
 
   const request = new Request("http://localhost/");
@@ -95,9 +99,10 @@ test("securityPlugin should set X-Content-Type-Options header", async () => {
 });
 
 test("isValidOrigin should validate origin format", async () => {
-  process.env["ALLOWED_ORIGINS"] = "https://example.com,http://localhost:3000,*,not-an-origin";
-  clearConfigCache();
-  const config = getConfig();
+  const config = {
+    ...getConfig(),
+    allowedOrigins: ["https://example.com", "http://localhost:3000", "*", "not-an-origin"],
+  };
   const app = new Elysia().use((app) => securityPlugin(app, config)).get("/", () => "Hello");
 
   const request = new Request("http://localhost/");
@@ -109,17 +114,10 @@ test("isValidOrigin should validate origin format", async () => {
   expect(csp).not.toContain("not-an-origin");
 });
 
-test("securityPlugin should handle empty allowed origins", async () => {
+test("config should reject empty allowed origins", () => {
   process.env["ALLOWED_ORIGINS"] = "";
   clearConfigCache();
-  const config = getConfig();
-  const app = new Elysia().use((app) => securityPlugin(app, config)).get("/", () => "Hello");
-
-  const request = new Request("http://localhost/");
-  const response = await app.handle(request);
-
-  // Should still set CSP header
-  expect(response.headers.get("Content-Security-Policy")).toBeDefined();
+  expect(() => getConfig()).toThrow("ALLOWED_ORIGINS must include at least one origin or *");
 });
 
 describe("isValidOrigin", () => {
@@ -140,6 +138,10 @@ describe("isValidOrigin", () => {
       expect(isValidOrigin("http://localhost:3000")).toBe(true);
       expect(isValidOrigin("http://localhost:8080")).toBe(true);
       expect(isValidOrigin("https://example.com:65535")).toBe(true);
+    });
+
+    test("should accept IPv6 localhost origins", () => {
+      expect(isValidOrigin("http://[::1]:3000")).toBe(true);
     });
 
     test("should accept wildcard", () => {
@@ -204,6 +206,13 @@ describe("isValidOrigin", () => {
     test("should reject protocol-only", () => {
       expect(isValidOrigin("https://")).toBe(false);
       expect(isValidOrigin("http://")).toBe(false);
+    });
+
+    test("should reject ports outside the valid range", () => {
+      expect(isValidOrigin("https://example.com:0")).toBe(false);
+      expect(isValidOrigin("https://example.com:00000")).toBe(false);
+      expect(isValidOrigin("https://example.com:65536")).toBe(false);
+      expect(isValidOrigin("https://example.com:99999")).toBe(false);
     });
 
     test("should reject origins with paths", () => {

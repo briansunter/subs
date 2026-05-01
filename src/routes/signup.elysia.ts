@@ -32,7 +32,7 @@ import {
  * Type for a beforeHandle guard function
  * Uses unknown for context to accept Elysia's full context type
  */
-type GuardFunction = (context: unknown) => { error: string };
+type GuardFunction = (context: unknown) => { success: false; statusCode: 404; error: string };
 
 /**
  * Create a beforeHandle guard that returns 404 when feature is disabled
@@ -48,7 +48,7 @@ function createFeatureGuard(isEnabled: boolean): undefined | GuardFunction[] {
           if (isObject(context) && hasSetProperty(context)) {
             context["set"]["status"] = 404;
           }
-          return { error: "Not found" };
+          return { success: false, statusCode: 404, error: "Not found" };
         },
       ];
 }

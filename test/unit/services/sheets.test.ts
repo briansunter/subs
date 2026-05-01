@@ -60,6 +60,8 @@ const testConfig: SignupConfig = {
   defaultSheetTab: "Sheet1",
   allowedOrigins: ["*"],
   enableMetrics: true,
+  nodeEnv: "test",
+  logLevel: "silent",
   allowedSheets: new Map(),
   sheetTabs: ["Sheet1"],
 };

@@ -434,7 +434,10 @@ export function getHtmlFormContent(config: SignupConfig): string {
             }, 1500);
           }
         } else {
-          messageEl.textContent = data.error || 'An error occurred. Please try again.';
+          const firstDetail = Array.isArray(data.details) && data.details.length > 0
+            ? data.details[0]
+            : null;
+          messageEl.textContent = firstDetail || data.error || 'An error occurred. Please try again.';
           messageEl.className = 'message error show';
 
           // Notify parent iframe of error
@@ -495,6 +498,8 @@ const DEFAULT_HTML_FORM_CONFIG: SignupConfig = {
   turnstileSiteKey: undefined,
   allowedOrigins: ["*"],
   enableMetrics: true,
+  nodeEnv: "development",
+  logLevel: "info",
   allowedSheets: new Map(),
   sheetTabs: ["Sheet1"],
 };

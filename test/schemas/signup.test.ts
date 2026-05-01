@@ -174,6 +174,22 @@ describe("Signup Schema Validation", () => {
 
       expect(result.success).toBe(false);
     });
+
+    test("should trim name, source, and tags", () => {
+      const result = extendedSignupSchema.safeParse({
+        email: "test@example.com",
+        name: "  Jane Doe  ",
+        source: "  landing-page  ",
+        tags: [" newsletter ", " beta "],
+      });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.name).toBe("Jane Doe");
+        expect(result.data.source).toBe("landing-page");
+        expect(result.data.tags).toEqual(["newsletter", "beta"]);
+      }
+    });
   });
 
   describe("bulkSignupSchema", () => {
@@ -237,6 +253,23 @@ describe("Signup Schema Validation", () => {
 
       expect(result.success).toBe(false);
     });
+
+    test("should trim and reject blank request-level Turnstile tokens", () => {
+      const trimmed = bulkSignupSchema.safeParse({
+        signups: [{ email: "valid@example.com" }],
+        turnstileToken: " token ",
+      });
+      expect(trimmed.success).toBe(true);
+      if (trimmed.success) {
+        expect(trimmed.data.turnstileToken).toBe("token");
+      }
+
+      const blank = bulkSignupSchema.safeParse({
+        signups: [{ email: "valid@example.com" }],
+        turnstileToken: "   ",
+      });
+      expect(blank.success).toBe(false);
+    });
   });
 
   describe("Edge Cases and Security", () => {
@@ -273,10 +306,21 @@ describe("Signup Schema Validation", () => {
         sheetTab: "  Sheet1  ",
       });
 
-      // Note: Zod doesn't auto-trim strings by default
       expect(result.success).toBe(true);
       if (result.success) {
-        expect(result.data.sheetTab).toBe("  Sheet1  ");
+        expect(result.data.sheetTab).toBe("Sheet1");
+      }
+    });
+
+    test("should reject invalid Google Sheets tab names", () => {
+      const invalidTabs = ["Bad/Tab", "Bad\\Tab", "Bad?Tab", "Bad*Tab", "Bad[Tab]", "Bad]Tab"];
+
+      for (const sheetTab of invalidTabs) {
+        const result = signupSchema.safeParse({
+          email: "test@example.com",
+          sheetTab,
+        });
+        expect(result.success).toBe(false);
       }
     });
 

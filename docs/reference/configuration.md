@@ -51,18 +51,20 @@ HOST=127.0.0.1
 CORS allowed origins (comma-separated). Default: `*`
 
 This list also controls iframe embedding through CSP `frame-ancestors`.
+Origins must include `http://` or `https://` and must not include paths.
 
 ```bash
 # Production
 ALLOWED_ORIGINS=https://yoursite.com,https://www.yoursite.com
 
 # Development
-ALLOWED_ORIGINS=*
+ALLOWED_ORIGINS=http://localhost:3000
 ```
 
 ### `DEFAULT_SHEET_TAB`
 
 Default sheet tab when `sheetTab` is not specified. Default: `Sheet1`
+Google Sheets tab names must be 1-100 characters and cannot contain `:`, `\`, `/`, `?`, `*`, `[`, or `]`.
 
 ```bash
 DEFAULT_SHEET_TAB=Newsletter
@@ -103,6 +105,7 @@ ALLOWED_SHEETS=abc123:blog,def456:landing-page
 ### `SHEET_TABS`
 
 Available sheet tabs (comma-separated). Default: `[DEFAULT_SHEET_TAB]`
+The same Google Sheets tab name restrictions apply to each value.
 
 ```bash
 SHEET_TABS=Sheet1,Newsletter,Beta
@@ -112,7 +115,7 @@ SHEET_TABS=Sheet1,Newsletter,Beta
 
 Pino log level. Default: `info`
 
-Values: `fatal`, `error`, `warn`, `info`, `debug`, `trace`
+Values: `fatal`, `error`, `warn`, `info`, `debug`, `trace`, `silent`
 
 ```bash
 LOG_LEVEL=warn
@@ -162,14 +165,14 @@ The API validates all environment variables on startup using Zod. Missing or inv
 
 | Variable | Validation |
 |----------|------------|
-| `GOOGLE_SHEET_ID` | Required, non-empty string |
+| `GOOGLE_SHEET_ID` | Required, non-empty string after trimming |
 | `GOOGLE_CREDENTIALS_EMAIL` | Required, valid email format |
 | `GOOGLE_PRIVATE_KEY` | Required, non-empty string |
-| `PORT` | Number 1-65535 |
-| `ALLOWED_ORIGINS` | Comma-separated strings |
+| `PORT` | Integer 1-65535 |
+| `ALLOWED_ORIGINS` | `*` or comma-separated `http://` / `https://` origins without paths |
 | `ENABLE_METRICS` | `"true"` or `"false"` |
 | `ALLOWED_SHEETS` | `sheetId:siteName,...` format |
-| `SHEET_TABS` | Comma-separated tab names |
+| `DEFAULT_SHEET_TAB`, `SHEET_TABS` | Valid Google Sheets tab names |
 | `LOG_LEVEL` | Valid Pino log level |
 
 ### Clearing Config Cache (Testing)

@@ -63,6 +63,23 @@ test("worker should handle CORS preflight", async () => {
   expect(response.status).toBe(204);
 });
 
+test("worker should load configuration from Cloudflare env bindings", async () => {
+  const response = await worker.fetch(new Request("http://localhost/api/config"), {
+    GOOGLE_SHEET_ID: "worker-sheet-id",
+    GOOGLE_CREDENTIALS_EMAIL: "worker@test.com",
+    GOOGLE_PRIVATE_KEY: "worker-key",
+    DEFAULT_SHEET_TAB: "WorkerTab",
+    SHEET_TABS: "WorkerTab,Beta",
+    ALLOWED_ORIGINS: "https://worker.example",
+    ENABLE_METRICS: "false",
+  });
+  const body = (await response.json()) as { defaultSheetTab: string; sheetTabs: string[] };
+
+  expect(response.status).toBe(200);
+  expect(body.defaultSheetTab).toBe("WorkerTab");
+  expect(body.sheetTabs).toEqual(["WorkerTab", "Beta"]);
+});
+
 test("worker should handle POST requests", async () => {
   const request = new Request("http://localhost/api/signup", {
     method: "POST",

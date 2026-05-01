@@ -318,8 +318,13 @@ describe.serial("Security Tests - Integration", () => {
           }),
         );
 
-        // Should handle safely - tab names are just strings
-        expect([200, 500]).toContain(response.status);
+        if (tab.includes("/") || tab.includes("\\")) {
+          expect(response.status).toBe(400);
+          const data = await response.json();
+          expect(JSON.stringify(data)).toContain("Sheet tab name cannot contain");
+        } else {
+          expect(response.status).toBe(200);
+        }
       }
     });
 

@@ -67,7 +67,7 @@ export const loggingPlugin = (app: Elysia) =>
         {
           method: request.method,
           url: request.url,
-          statusCode: set.status,
+          statusCode: typeof set.status === "number" ? set.status : 500,
           responseTime: duration,
         },
         "Request completed",

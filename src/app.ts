@@ -82,6 +82,24 @@ export const createApp = (elysiaOptions?: Partial<ElysiaConfig<"">>, appConfig?:
       .use((app) => metricsPlugin(app))
       // Error handling
       .onError(({ error, code, set }) => {
+        if (code === "NOT_FOUND") {
+          set.status = 404;
+          return {
+            success: false,
+            statusCode: 404,
+            error: "Not found",
+          };
+        }
+
+        if (code === "PARSE") {
+          set.status = 400;
+          return {
+            success: false,
+            statusCode: 400,
+            error: "Malformed request body",
+          };
+        }
+
         // Handle validation errors (from Zod/Standard Schema)
         if (code === "VALIDATION") {
           set.status = 400;
@@ -95,7 +113,7 @@ export const createApp = (elysiaOptions?: Partial<ElysiaConfig<"">>, appConfig?:
         }
 
         // Handle other errors - use generic message to avoid leaking internals
-        const statusCode = set.status || 500;
+        const statusCode = typeof set.status === "number" ? set.status : 500;
         return {
           success: false,
           statusCode,

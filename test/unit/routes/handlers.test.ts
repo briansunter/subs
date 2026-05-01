@@ -73,6 +73,8 @@ describe("Route Handlers - Unit Tests", () => {
         googlePrivateKey: "-----BEGIN PRIVATE KEY-----\ntest\n-----END PRIVATE KEY-----\n",
         allowedOrigins: ["*"],
         enableMetrics: true,
+        nodeEnv: "test",
+        logLevel: "silent",
         allowedSheets: new Map(),
         sheetTabs: ["Sheet1"],
       },

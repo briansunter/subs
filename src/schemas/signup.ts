@@ -9,6 +9,11 @@
  */
 
 import { z } from "zod";
+import {
+  INVALID_SHEET_TAB_MESSAGE,
+  isValidSheetTabName,
+  MAX_SHEET_TAB_LENGTH,
+} from "../utils/sheet-tab";
 
 /**
  * Email validation with strict format checking
@@ -22,24 +27,37 @@ export const emailSchema = z
   .email("Invalid email format")
   .toLowerCase();
 
+const sheetTabSchema = z
+  .string()
+  .trim()
+  .min(1, "Sheet tab name is required")
+  .max(MAX_SHEET_TAB_LENGTH, `Sheet tab name cannot exceed ${MAX_SHEET_TAB_LENGTH} characters`)
+  .refine(isValidSheetTabName, { message: INVALID_SHEET_TAB_MESSAGE });
+
+const siteSchema = z.string().trim().min(1, "Site name is required").max(100);
+const nameSchema = z.string().trim().min(1, "Name is required").max(200);
+const sourceSchema = z.string().trim().min(1, "Source is required").max(100).default("api");
+const tagSchema = z.string().trim().min(1, "Tag cannot be empty").max(100);
+const turnstileTokenSchema = z.string().trim().min(1, "Turnstile token is required");
+
 /**
  * Base signup schema
  */
 export const signupSchema = z.object({
   email: emailSchema,
-  sheetTab: z.string().min(1, "Sheet tab name is required").optional(), // Default comes from config.defaultSheetTab
-  site: z.string().min(1, "Site name is required").optional(),
+  sheetTab: sheetTabSchema.optional(), // Default comes from config.defaultSheetTab
+  site: siteSchema.optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
-  turnstileToken: z.string().optional(),
+  turnstileToken: turnstileTokenSchema.optional(),
 });
 
 /**
  * Extended signup schema with additional fields
  */
 export const extendedSignupSchema = signupSchema.extend({
-  name: z.string().min(1, "Name is required").optional(),
-  source: z.string().optional().default("api"),
-  tags: z.array(z.string()).max(50, "Cannot have more than 50 tags").optional().default([]),
+  name: nameSchema.optional(),
+  source: sourceSchema,
+  tags: z.array(tagSchema).max(50, "Cannot have more than 50 tags").default([]),
 });
 
 /**
@@ -52,7 +70,7 @@ export const bulkSignupSchema = z.object({
     .array(bulkSignupItemSchema)
     .min(1, "At least one signup is required")
     .max(100, "Cannot submit more than 100 signups at once"),
-  turnstileToken: z.string().optional(),
+  turnstileToken: turnstileTokenSchema.optional(),
 });
 
 export type SignupInput = z.infer<typeof signupSchema>;

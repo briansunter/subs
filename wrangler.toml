@@ -27,8 +27,13 @@ compatibility_flags = ["nodejs_compat"]
 # - CLOUDFLARE_TURNSTILE_SITE_KEY
 # - ALLOWED_ORIGINS (defaults to *)
 # - DEFAULT_SHEET_TAB (defaults to "Sheet1")
+# - SHEET_TABS (optional comma-separated tab allowlist)
+# - ALLOWED_SHEETS (optional sheetId:siteName mappings)
 # - ENABLE_METRICS (defaults to "true")
 # - LOG_LEVEL (defaults to "info")
+
+[vars]
+NODE_ENV = "production"
 
 # KV Namespaces (optional - for caching)
 # [[kv_namespaces]]
@@ -43,11 +48,3 @@ compatibility_flags = ["nodejs_compat"]
 # Workers AI (optional)
 # [ai]
 # binding = "AI"
-
-# Development environment
-[env.development]
-vars = { ENVIRONMENT = "development" }
-
-# Production environment
-[env.production]
-vars = { ENVIRONMENT = "production" }

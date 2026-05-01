@@ -84,6 +84,10 @@ export const metricsPlugin = (app: Elysia) =>
       // Record metrics for all errors
       if (code === "VALIDATION") {
         recordHttpRequest(request.method, route, 400, duration);
+      } else if (code === "PARSE") {
+        recordHttpRequest(request.method, route, 400, duration);
+      } else if (code === "NOT_FOUND") {
+        recordHttpRequest(request.method, route, 404, duration);
       } else {
         const statusCode = set.status || 500;
         recordHttpRequest(

@@ -132,6 +132,12 @@ const envSchema = z.object({
         }
 
         if (sheetId && siteName) {
+          if (map.has(siteName)) {
+            ctx.addIssue({
+              code: "custom",
+              message: `ALLOWED_SHEETS contains duplicate site name: ${siteName}`,
+            });
+          }
           map.set(siteName, sheetId);
         }
       }
@@ -155,6 +161,7 @@ const envSchema = z.object({
           message: "SHEET_TABS must include at least one sheet tab",
         });
       }
+      const seenTabs = new Set<string>();
       for (const tab of tabs) {
         if (!isValidSheetTabName(tab)) {
           ctx.addIssue({
@@ -162,9 +169,33 @@ const envSchema = z.object({
             message: `${tab}: ${INVALID_SHEET_TAB_MESSAGE}`,
           });
         }
+        if (seenTabs.has(tab)) {
+          ctx.addIssue({
+            code: "custom",
+            message: `SHEET_TABS contains duplicate sheet tab: ${tab}`,
+          });
+        } else {
+          seenTabs.add(tab);
+        }
       }
       return tabs;
     }),
+});
+
+// Cross-field integrity: when SHEET_TABS is explicitly configured, the
+// DEFAULT_SHEET_TAB must be one of the parsed tabs so a missing-tab request
+// can never silently fall back to a tab that is not actually available.
+const validatedEnvSchema = envSchema.superRefine((env, ctx) => {
+  if (
+    env.SHEET_TABS &&
+    env.SHEET_TABS.length > 0 &&
+    !env.SHEET_TABS.includes(env.DEFAULT_SHEET_TAB)
+  ) {
+    ctx.addIssue({
+      code: "custom",
+      message: `DEFAULT_SHEET_TAB (${env.DEFAULT_SHEET_TAB}) must be present in SHEET_TABS when SHEET_TABS is configured`,
+    });
+  }
 });
 
 export interface SignupConfig {
@@ -201,7 +232,7 @@ export interface SignupConfig {
 
 export function loadEnv(envSource: EnvSource = getRuntimeEnv()): SignupConfig {
   // Parse and validate environment variables with Zod
-  const env = envSchema.parse(envSource);
+  const env = validatedEnvSchema.parse(envSource);
 
   // Replace \n with actual newlines in private key
   const formattedPrivateKey = env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, "\n");

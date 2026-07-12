@@ -126,8 +126,8 @@ describe("Sheets Service - REST API Tests", () => {
       // Mock values get
       if (
         urlString.includes("/values/") &&
-        (!options || options.method !== "PUT") &&
-        (!options || options.method !== "POST")
+        options?.method !== "PUT" &&
+        options?.method !== "POST"
       ) {
         return createMockResponse(200, {
           values: [["Email"], ["existing@example.com"]],
@@ -349,6 +349,292 @@ describe("Sheets Service - REST API Tests", () => {
       });
 
       await expect(initializeSheetTab("Sheet1", testConfig)).rejects.toThrow();
+    });
+  });
+
+  describe("sheet tab initialization single-flight", () => {
+    test("concurrent same-key initializations share one operation and issue a single addSheet", async () => {
+      let spreadsheetGets = 0;
+      let batchUpdates = 0;
+      let resolveFirstGet: (() => void) | undefined;
+      let signalFirstGet: (() => void) | undefined;
+      const firstGetDeferred = new Promise<void>((resolve) => {
+        resolveFirstGet = resolve;
+      });
+      const firstGetStarted = new Promise<void>((resolve) => {
+        signalFirstGet = resolve;
+      });
+
+      // Unique credentials guarantee a fresh token-cache identity for this test.
+      const uniqueConfig: SignupConfig = {
+        ...testConfig,
+        googleCredentialsEmail: "init-share@example.com",
+        googlePrivateKey:
+          "-----BEGIN PRIVATE KEY-----\ninit-share-key\n-----END PRIVATE KEY-----\n",
+      };
+
+      setMockFetch(async (url: string | Request, options?: RequestInit) => {
+        const urlString = url.toString();
+
+        if (urlString.includes("oauth2.googleapis.com/token")) {
+          return createMockResponse(200, {
+            access_token: "mock-access-token",
+            expires_in: 3600,
+            token_type: "Bearer",
+          });
+        }
+
+        if (
+          urlString.includes("/spreadsheets/test-sheet-id") &&
+          !urlString.includes(":batchUpdate") &&
+          !urlString.includes("/values/")
+        ) {
+          spreadsheetGets++;
+          if (spreadsheetGets === 1) {
+            // Block the first spreadsheet get so both callers overlap in flight.
+            signalFirstGet?.();
+            await firstGetDeferred;
+          }
+          // "SharedTab" is absent, so initialization reaches the addSheet step.
+          return createMockResponse(200, {
+            sheets: [{ properties: { title: "OtherSheet", sheetId: 1 } }],
+          });
+        }
+
+        if (urlString.includes(":batchUpdate")) {
+          batchUpdates++;
+          return createMockResponse(200, {});
+        }
+
+        if (urlString.includes("/values/SharedTab!A1%3AG1") && options?.method !== "PUT") {
+          return createMockResponse(200, { values: [] });
+        }
+
+        if (options?.method === "PUT" && urlString.includes("/values/")) {
+          return createMockResponse(200, {});
+        }
+
+        return createMockResponse(404, { error: "Not found" });
+      });
+
+      // Two concurrent initializations for a previously-absent tab. Each call
+      // returns its own async wrapper promise, but both adopt the single shared
+      // in-flight operation stored under the same key.
+      const p1 = initializeSheetTab("SharedTab", uniqueConfig);
+      const p2 = initializeSheetTab("SharedTab", uniqueConfig);
+
+      // Wait until the first caller is proven to be inside its body and in flight.
+      await firstGetStarted;
+
+      resolveFirstGet?.();
+      await Promise.all([p1, p2]);
+
+      // A single shared operation means one spreadsheet listing and one addSheet.
+      expect(spreadsheetGets).toBe(1);
+      expect(batchUpdates).toBe(1);
+    });
+
+    test("a rejected initialization is cleaned up so a later retry can proceed", async () => {
+      let batchUpdates = 0;
+      let firstAttempt = true;
+
+      // Unique credentials guarantee a fresh token-cache identity for this test.
+      const uniqueConfig: SignupConfig = {
+        ...testConfig,
+        googleCredentialsEmail: "init-retry@example.com",
+        googlePrivateKey:
+          "-----BEGIN PRIVATE KEY-----\ninit-retry-key\n-----END PRIVATE KEY-----\n",
+      };
+
+      setMockFetch(async (url: string | Request, options?: RequestInit) => {
+        const urlString = url.toString();
+
+        if (urlString.includes("oauth2.googleapis.com/token")) {
+          return createMockResponse(200, {
+            access_token: "mock-access-token",
+            expires_in: 3600,
+            token_type: "Bearer",
+          });
+        }
+
+        if (
+          urlString.includes("/spreadsheets/test-sheet-id") &&
+          !urlString.includes(":batchUpdate") &&
+          !urlString.includes("/values/")
+        ) {
+          // "RetryTab" is absent, so initialization reaches the addSheet step.
+          return createMockResponse(200, {
+            sheets: [{ properties: { title: "OtherSheet", sheetId: 1 } }],
+          });
+        }
+
+        if (urlString.includes(":batchUpdate")) {
+          batchUpdates++;
+          if (firstAttempt) {
+            firstAttempt = false;
+            return createMockResponse(500, { error: "batch update failed" });
+          }
+          return createMockResponse(200, {});
+        }
+
+        if (urlString.includes("/values/RetryTab!A1%3AG1") && options?.method !== "PUT") {
+          return createMockResponse(200, { values: [] });
+        }
+
+        if (options?.method === "PUT" && urlString.includes("/values/")) {
+          return createMockResponse(200, {});
+        }
+
+        return createMockResponse(404, { error: "Not found" });
+      });
+
+      // First initialization fails at the addSheet step.
+      await expect(initializeSheetTab("RetryTab", uniqueConfig)).rejects.toThrow();
+      expect(batchUpdates).toBe(1);
+
+      // The failed in-flight entry must have been cleared, so this retry re-runs.
+      await initializeSheetTab("RetryTab", uniqueConfig);
+      expect(batchUpdates).toBe(2);
+    });
+  });
+
+  describe("sheet tab initialization cross-isolate race recovery", () => {
+    test("recovers when a concurrent isolate created the tab before addSheet succeeded", async () => {
+      const targetTab = "RaceTab";
+      let spreadsheetGets = 0;
+      let batchUpdates = 0;
+      let headerPuts = 0;
+
+      // Unique credentials guarantee a fresh token-cache identity for this test.
+      const uniqueConfig: SignupConfig = {
+        ...testConfig,
+        googleCredentialsEmail: "race-recover@example.com",
+        googlePrivateKey:
+          "-----BEGIN PRIVATE KEY-----\nrace-recover-key\n-----END PRIVATE KEY-----\n",
+      };
+
+      setMockFetch(async (url: string | Request, options?: RequestInit) => {
+        const urlString = url.toString();
+
+        if (urlString.includes("oauth2.googleapis.com/token")) {
+          return createMockResponse(200, {
+            access_token: "mock-access-token",
+            expires_in: 3600,
+            token_type: "Bearer",
+          });
+        }
+
+        if (
+          urlString.includes("/spreadsheets/test-sheet-id") &&
+          !urlString.includes(":batchUpdate") &&
+          !urlString.includes("/values/")
+        ) {
+          spreadsheetGets++;
+          if (spreadsheetGets === 1) {
+            // Initial listing: target tab absent → initialization reaches addSheet.
+            return createMockResponse(200, {
+              sheets: [{ properties: { title: "OtherSheet", sheetId: 1 } }],
+            });
+          }
+          // Verification re-read after the failed addSheet: target tab now present.
+          return createMockResponse(200, {
+            sheets: [
+              { properties: { title: "OtherSheet", sheetId: 1 } },
+              { properties: { title: targetTab, sheetId: 2 } },
+            ],
+          });
+        }
+
+        if (urlString.includes(":batchUpdate")) {
+          batchUpdates++;
+          // A concurrent isolate created the tab first → this addSheet is rejected.
+          return createMockResponse(400, { error: "A sheet with this name already exists" });
+        }
+
+        if (urlString.includes(`/values/${targetTab}!A1%3AG1`) && options?.method !== "PUT") {
+          return createMockResponse(200, { values: [] });
+        }
+
+        if (options?.method === "PUT" && urlString.includes("/values/")) {
+          headerPuts++;
+          return createMockResponse(200, {});
+        }
+
+        return createMockResponse(404, { error: "Not found" });
+      });
+
+      // The stale addSheet error is recoverable: initialization must not throw.
+      await initializeSheetTab(targetTab, uniqueConfig);
+
+      // One addSheet attempt, then a verification re-read that found the tab.
+      expect(batchUpdates).toBe(1);
+      expect(spreadsheetGets).toBe(2);
+
+      // Header initialization still runs after recovery.
+      expect(headerPuts).toBe(1);
+    });
+
+    test("rethrows the original addSheet error when the tab remains absent after failure", async () => {
+      const targetTab = "AbsentTab";
+      let spreadsheetGets = 0;
+      let batchUpdates = 0;
+
+      // Unique credentials guarantee a fresh token-cache identity for this test.
+      const uniqueConfig: SignupConfig = {
+        ...testConfig,
+        googleCredentialsEmail: "race-absent@example.com",
+        googlePrivateKey:
+          "-----BEGIN PRIVATE KEY-----\nrace-absent-key\n-----END PRIVATE KEY-----\n",
+      };
+
+      setMockFetch(async (url: string | Request, options?: RequestInit) => {
+        const urlString = url.toString();
+
+        if (urlString.includes("oauth2.googleapis.com/token")) {
+          return createMockResponse(200, {
+            access_token: "mock-access-token",
+            expires_in: 3600,
+            token_type: "Bearer",
+          });
+        }
+
+        if (
+          urlString.includes("/spreadsheets/test-sheet-id") &&
+          !urlString.includes(":batchUpdate") &&
+          !urlString.includes("/values/")
+        ) {
+          spreadsheetGets++;
+          // Both the initial listing and the verification re-read omit the target.
+          return createMockResponse(200, {
+            sheets: [{ properties: { title: "OtherSheet", sheetId: 1 } }],
+          });
+        }
+
+        if (urlString.includes(":batchUpdate")) {
+          batchUpdates++;
+          return createMockResponse(500, { error: "batch update failed" });
+        }
+
+        if (urlString.includes(`/values/${targetTab}!A1%3AG1`) && options?.method !== "PUT") {
+          return createMockResponse(200, { values: [] });
+        }
+
+        if (options?.method === "PUT" && urlString.includes("/values/")) {
+          return createMockResponse(200, {});
+        }
+
+        return createMockResponse(404, { error: "Not found" });
+      });
+
+      // The tab is still absent after the failed addSheet, so the original addSheet
+      // error propagates rather than being masked as a generic failure.
+      await expect(initializeSheetTab(targetTab, uniqueConfig)).rejects.toThrow(
+        "Sheets API request failed: 500 Error",
+      );
+
+      expect(batchUpdates).toBe(1);
+      // Initial listing plus the verification re-read that confirmed absence.
+      expect(spreadsheetGets).toBe(2);
     });
   });
 
@@ -1157,6 +1443,286 @@ describe("Sheets Service - REST API Tests", () => {
       await expect(getSignupStats("Sheet1", testConfig)).rejects.toThrow(
         "Failed to fetch signup stats",
       );
+    });
+  });
+
+  describe("token cache hardening", () => {
+    test("concurrent operations share a single OAuth token exchange", async () => {
+      let tokenCalls = 0;
+      let resolveToken: ((response: Response) => void) | undefined;
+      let signalTokenFetch: (() => void) | undefined;
+      const tokenDeferred = new Promise<Response>((resolve) => {
+        resolveToken = resolve;
+      });
+      const tokenFetchStarted = new Promise<void>((resolve) => {
+        signalTokenFetch = resolve;
+      });
+
+      // Unique credentials guarantee a fresh cache identity for this test.
+      const uniqueConfig: SignupConfig = {
+        ...testConfig,
+        googleCredentialsEmail: "concurrent@example.com",
+        googlePrivateKey:
+          "-----BEGIN PRIVATE KEY-----\nconcurrent-key\n-----END PRIVATE KEY-----\n",
+      };
+
+      setMockFetch(async (url: string | Request) => {
+        const urlString = url.toString();
+
+        if (urlString.includes("oauth2.googleapis.com/token")) {
+          tokenCalls++;
+          signalTokenFetch?.();
+          return tokenDeferred;
+        }
+
+        if (
+          urlString.includes("/spreadsheets/test-sheet-id") &&
+          !urlString.includes(":batchUpdate") &&
+          !urlString.includes("/values/")
+        ) {
+          return createMockResponse(200, {
+            sheets: [{ properties: { title: "Sheet1", sheetId: 1 } }],
+          });
+        }
+
+        if (urlString.includes("/values/")) {
+          return createMockResponse(200, { values: [["Email", "Timestamp"]] });
+        }
+
+        return createMockResponse(404, { error: "Not found" });
+      });
+
+      // Two concurrent operations start before the token exchange resolves.
+      const p1 = getSignupStats("Sheet1", uniqueConfig);
+      const p2 = getSignupStats("Sheet1", uniqueConfig);
+
+      // Wait until the first caller reaches the token endpoint.
+      await tokenFetchStarted;
+
+      // Single-flight: both operations share one in-flight exchange.
+      expect(tokenCalls).toBe(1);
+
+      resolveToken?.(
+        createMockResponse(200, {
+          access_token: "shared-token",
+          expires_in: 3600,
+          token_type: "Bearer",
+        }),
+      );
+
+      await Promise.all([p1, p2]);
+
+      // Subsequent sheets calls reused the cached token; no second exchange.
+      expect(tokenCalls).toBe(1);
+    });
+
+    test("a failed token refresh does not permanently block a subsequent refresh", async () => {
+      let tokenCalls = 0;
+      let firstAttempt = true;
+
+      const uniqueConfig: SignupConfig = {
+        ...testConfig,
+        googleCredentialsEmail: "recovery@example.com",
+        googlePrivateKey: "-----BEGIN PRIVATE KEY-----\nrecovery-key\n-----END PRIVATE KEY-----\n",
+      };
+
+      setMockFetch(async (url: string | Request) => {
+        const urlString = url.toString();
+
+        if (urlString.includes("oauth2.googleapis.com/token")) {
+          tokenCalls++;
+          if (firstAttempt) {
+            firstAttempt = false;
+            return createMockResponse(401, { error: "invalid_grant" });
+          }
+          return createMockResponse(200, {
+            access_token: "recovered-token",
+            expires_in: 3600,
+            token_type: "Bearer",
+          });
+        }
+
+        if (
+          urlString.includes("/spreadsheets/test-sheet-id") &&
+          !urlString.includes(":batchUpdate") &&
+          !urlString.includes("/values/")
+        ) {
+          return createMockResponse(200, {
+            sheets: [{ properties: { title: "Sheet1", sheetId: 1 } }],
+          });
+        }
+
+        if (urlString.includes("/values/")) {
+          return createMockResponse(200, { values: [["Email", "Timestamp"]] });
+        }
+
+        return createMockResponse(404, { error: "Not found" });
+      });
+
+      // First operation fails because the token exchange fails.
+      await expect(getSignupStats("Sheet1", uniqueConfig)).rejects.toThrow();
+      expect(tokenCalls).toBe(1);
+
+      // The rejected in-flight entry must be cleared so this refresh succeeds.
+      const stats = await getSignupStats("Sheet1", uniqueConfig);
+      expect(stats.total).toBe(0);
+      expect(tokenCalls).toBe(2);
+    });
+
+    test("a stale 401 does not discard a newer cached token", async () => {
+      let tokenCalls = 0;
+      let t1SpreadsheetCalls = 0;
+      let resolveA: (() => void) | undefined;
+      let signalA: (() => void) | undefined;
+      const aDeferred = new Promise<void>((resolve) => {
+        resolveA = resolve;
+      });
+      const aStarted = new Promise<void>((resolve) => {
+        signalA = resolve;
+      });
+
+      const uniqueConfig: SignupConfig = {
+        ...testConfig,
+        googleCredentialsEmail: "stale@example.com",
+        googlePrivateKey: "-----BEGIN PRIVATE KEY-----\nstale-key\n-----END PRIVATE KEY-----\n",
+      };
+
+      setMockFetch(async (url: string | Request, options?: RequestInit) => {
+        const urlString = url.toString();
+        const headers = options?.headers as Record<string, string> | undefined;
+        const auth = headers?.["Authorization"] ?? "";
+
+        if (urlString.includes("oauth2.googleapis.com/token")) {
+          tokenCalls++;
+          if (tokenCalls === 1) {
+            return createMockResponse(200, {
+              access_token: "T1",
+              expires_in: 3600,
+              token_type: "Bearer",
+            });
+          }
+          return createMockResponse(200, {
+            access_token: "T2",
+            expires_in: 3600,
+            token_type: "Bearer",
+          });
+        }
+
+        if (
+          urlString.includes("/spreadsheets/test-sheet-id") &&
+          !urlString.includes(":batchUpdate") &&
+          !urlString.includes("/values/")
+        ) {
+          if (auth === "Bearer T1") {
+            t1SpreadsheetCalls++;
+            if (t1SpreadsheetCalls === 1) {
+              // Request A's first call returns a stale 401 only once resolved.
+              signalA?.();
+              await aDeferred;
+              return createMockResponse(401, { error: "unauthorized" });
+            }
+            // Request B's call with the same T1: immediate 401 to trigger refresh.
+            return createMockResponse(401, { error: "unauthorized" });
+          }
+          return createMockResponse(200, {
+            sheets: [{ properties: { title: "Sheet1", sheetId: 1 } }],
+          });
+        }
+
+        if (urlString.includes("/values/")) {
+          return createMockResponse(200, { values: [["Email", "Timestamp"]] });
+        }
+
+        return createMockResponse(404, { error: "Not found" });
+      });
+
+      // A obtains T1 and blocks on its deferred spreadsheet response.
+      const a = getSignupStats("Sheet1", uniqueConfig);
+      await aStarted;
+
+      // B reuses the cached T1, gets a 401, clears the cache (T1 === T1),
+      // refreshes to T2, and retries successfully. Cache now holds T2.
+      const b = getSignupStats("Sheet1", uniqueConfig);
+      await b;
+      expect(tokenCalls).toBe(2);
+
+      // Now A's stale 401 resolves. A must not discard the newer T2.
+      resolveA?.();
+      await a;
+
+      // A retried with the cached T2 instead of minting a third token.
+      expect(tokenCalls).toBe(2);
+    });
+
+    test("a rotated private key for the same email does not reuse the cached token", async () => {
+      let tokenCalls = 0;
+      const issuedTokens: string[] = [];
+
+      // Same email, two distinct private keys → two distinct identities.
+      const email = "rotation@example.com";
+      const configAlpha: SignupConfig = {
+        ...testConfig,
+        googleCredentialsEmail: email,
+        googlePrivateKey: "-----BEGIN PRIVATE KEY-----\nalpha-key\n-----END PRIVATE KEY-----\n",
+      };
+      const configBeta: SignupConfig = {
+        ...testConfig,
+        googleCredentialsEmail: email,
+        googlePrivateKey: "-----BEGIN PRIVATE KEY-----\nbeta-key\n-----END PRIVATE KEY-----\n",
+      };
+
+      setMockFetch(async (url: string | Request) => {
+        const urlString = url.toString();
+
+        if (urlString.includes("oauth2.googleapis.com/token")) {
+          tokenCalls++;
+          const token = tokenCalls === 1 ? "token-alpha" : "token-beta";
+          issuedTokens.push(token);
+          return createMockResponse(200, {
+            access_token: token,
+            expires_in: 3600,
+            token_type: "Bearer",
+          });
+        }
+
+        if (
+          urlString.includes("/spreadsheets/test-sheet-id") &&
+          !urlString.includes(":batchUpdate") &&
+          !urlString.includes("/values/")
+        ) {
+          return createMockResponse(200, {
+            sheets: [{ properties: { title: "Sheet1", sheetId: 1 } }],
+          });
+        }
+
+        if (urlString.includes("/values/")) {
+          return createMockResponse(200, { values: [["Email", "Timestamp"]] });
+        }
+
+        return createMockResponse(404, { error: "Not found" });
+      });
+
+      // Alpha exchanges and caches its token under identity A.
+      await getSignupStats("Sheet1", configAlpha);
+      expect(tokenCalls).toBe(1);
+
+      // Beta shares the email but not the key, so its identity differs and the
+      // cached alpha token must not be reused → a second token exchange.
+      await getSignupStats("Sheet1", configBeta);
+      expect(tokenCalls).toBe(2);
+      expect(issuedTokens).toEqual(["token-alpha", "token-beta"]);
+    });
+  });
+
+  describe("upstream timeout wiring", () => {
+    test("routes every upstream request through a helper that supplies an abort signal", async () => {
+      // Uses the default beforeEach mock (token + spreadsheet + values).
+      await getSignupStats("Sheet1", testConfig);
+
+      expect(fetchCalls.length).toBeGreaterThan(0);
+      for (const call of fetchCalls) {
+        expect(call.options?.signal).toBeInstanceOf(AbortSignal);
+      }
     });
   });
 });

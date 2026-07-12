@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { clearConfigCache } from "../../../src/config";
 import type { SignupContext } from "../../../src/routes/handlers";
 import { createSignupRoutes } from "../../../src/routes/signup.elysia";
+import { MAX_TURNSTILE_TOKEN_LENGTH } from "../../../src/schemas/signup";
 import { mockSheetsService } from "../../mocks/sheets";
 import { mockTurnstileService } from "../../mocks/turnstile";
 
@@ -243,6 +244,76 @@ describe("Validation", () => {
     expect(body.success).toBe(false);
     expect(body.error).toBe("Validation failed");
   });
+
+  test("should return 400 for an invalid stats sheetTab with forbidden characters", async () => {
+    const app = createSignupRoutes(mockContext);
+    const response = await app.handle(new Request("http://localhost/api/stats?sheetTab=Bad/Tab"));
+
+    expect(response.status).toBe(400);
+    const body = (await response.json()) as { success: boolean; error: string };
+    expect(body.success).toBe(false);
+    expect(body.error).toBe("Validation failed");
+  });
+});
+
+describe("Turnstile token length limit", () => {
+  test("should reject an overlong request-level token without calling any service", async () => {
+    // Turnstile is configured, so the token would reach Cloudflare if schema
+    // validation let it through. The length cap must reject it first.
+    const secureContext: SignupContext = {
+      ...mockContext,
+      config: {
+        ...mockContext.config,
+        turnstileSecretKey: "test-secret",
+        turnstileSiteKey: "test-site-key",
+      },
+    };
+    const app = createSignupRoutes(secureContext);
+
+    const response = await app.handle(
+      new Request("http://localhost/api/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: "test@example.com",
+          turnstileToken: "x".repeat(MAX_TURNSTILE_TOKEN_LENGTH + 1),
+        }),
+      }),
+    );
+
+    expect(response.status).toBe(400);
+    const body = (await response.json()) as {
+      success: boolean;
+      error: string;
+      details?: string[];
+    };
+    expect(body.success).toBe(false);
+    expect(body.error).toBe("Validation failed");
+    expect(body.details?.some((d) => d.includes("Turnstile token is too long"))).toBe(true);
+
+    // The overlong token is rejected before any service is contacted: Cloudflare
+    // Turnstile is never asked to verify it, and Sheets is never read or written.
+    expect(mockTurnstileService.getCallCount()).toBe(0);
+    expect(mockSheetsService.getEmailExistsCalls()).toBe(0);
+    expect(mockSheetsService.getAppendSignupCalls()).toBe(0);
+  });
+
+  test("should accept a Turnstile token at exactly the maximum length", async () => {
+    const app = createSignupRoutes(mockContext);
+
+    const response = await app.handle(
+      new Request("http://localhost/api/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: "test@example.com",
+          turnstileToken: "x".repeat(MAX_TURNSTILE_TOKEN_LENGTH),
+        }),
+      }),
+    );
+
+    expect(response.status).toBe(200);
+  });
 });
 
 describe("Embed Script Dynamic URL", () => {
@@ -293,5 +364,118 @@ describe("Form POST Endpoint", () => {
     expect(response.status).toBe(415);
     const body = (await response.json()) as { error: string };
     expect(body.error).toBe("Unsupported Media Type");
+  });
+
+  test("should accept mixed-case application/x-www-form-urlencoded", async () => {
+    const app = createSignupRoutes(mockContext);
+
+    const response = await app.handle(
+      new Request("http://localhost/api/signup/form", {
+        method: "POST",
+        headers: { "Content-Type": "Application/X-WWW-Form-Urlencoded" },
+        body: "email=test@example.com&name=Test&sheetTab=Sheet1",
+      }),
+    );
+
+    expect(response.status).toBe(200);
+  });
+
+  test("should accept application/x-www-form-urlencoded with charset parameter", async () => {
+    const app = createSignupRoutes(mockContext);
+
+    const response = await app.handle(
+      new Request("http://localhost/api/signup/form", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded; charset=utf-8" },
+        body: "email=test@example.com&name=Test&sheetTab=Sheet1",
+      }),
+    );
+
+    expect(response.status).toBe(200);
+  });
+
+  test("should accept multipart/form-data with boundary parameter", async () => {
+    const app = createSignupRoutes(mockContext);
+    const boundary = "TestBoundary123";
+
+    const body = [
+      `--${boundary}`,
+      'Content-Disposition: form-data; name="email"',
+      "",
+      "test@example.com",
+      `--${boundary}`,
+      'Content-Disposition: form-data; name="name"',
+      "",
+      "Test",
+      `--${boundary}`,
+      'Content-Disposition: form-data; name="sheetTab"',
+      "",
+      "Sheet1",
+      `--${boundary}--`,
+      "",
+    ].join("\r\n");
+
+    const response = await app.handle(
+      new Request("http://localhost/api/signup/form", {
+        method: "POST",
+        headers: { "Content-Type": `multipart/form-data; boundary=${boundary}` },
+        body,
+      }),
+    );
+
+    expect(response.status).toBe(200);
+  });
+
+  test("should reject a near-miss content type containing the form-urlencoded substring", async () => {
+    const app = createSignupRoutes(mockContext);
+
+    const response = await app.handle(
+      new Request("http://localhost/api/signup/form", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded-extra" },
+        body: "email=test@example.com&name=Test&sheetTab=Sheet1",
+      }),
+    );
+
+    expect(response.status).toBe(415);
+    const body = (await response.json()) as { error: string };
+    expect(body.error).toBe("Unsupported Media Type");
+  });
+
+  test("should return 400 for multipart/form-data missing its boundary parameter", async () => {
+    const app = createSignupRoutes(mockContext);
+
+    const response = await app.handle(
+      new Request("http://localhost/api/signup/form", {
+        method: "POST",
+        // multipart media type with no boundary -> body cannot be parsed
+        headers: { "Content-Type": "multipart/form-data" },
+        body: "email=test@example.com&name=Test",
+      }),
+    );
+
+    expect(response.status).toBe(400);
+    const body = (await response.json()) as { success: boolean; error: string };
+    expect(body.success).toBe(false);
+    expect(body.error).toBe("Malformed request body");
+  });
+
+  test("should return 400 for a malformed multipart body that does not match its boundary", async () => {
+    const app = createSignupRoutes(mockContext);
+    const boundary = "TestBoundary123";
+
+    const response = await app.handle(
+      new Request("http://localhost/api/signup/form", {
+        method: "POST",
+        headers: { "Content-Type": `multipart/form-data; boundary=${boundary}` },
+        // Body lacks the boundary markers, so parsing fails
+        body: "this is not a valid multipart payload\r\n",
+      }),
+    );
+
+    expect(response.status).toBe(400);
+    const body = (await response.json()) as { success: boolean; error: string };
+    expect(body.success).toBe(false);
+    expect(body.error).toBe("Malformed request body");
   });
 });

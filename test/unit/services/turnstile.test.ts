@@ -451,4 +451,22 @@ describe("Turnstile Service - Unit Tests", () => {
       expect(result.error).toBe("Unexpected token");
     });
   });
+
+  describe("verifyTurnstileToken - Upstream timeout wiring", () => {
+    test("routes siteverify through a helper that supplies an abort signal", async () => {
+      const mockResponse = {
+        ok: true,
+        status: 200,
+        json: async () => ({ success: true }),
+      } as Response;
+
+      global.fetch = createMockFetch(mockResponse);
+
+      await verifyTurnstileToken(mockToken, mockSecret);
+
+      const calls = getFetchCalls();
+      expect(calls.length).toBe(1);
+      expect(calls[0]?.options.signal).toBeInstanceOf(AbortSignal);
+    });
+  });
 });

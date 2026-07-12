@@ -61,6 +61,25 @@ function parseFormBody(body: string): Record<string, string> {
 }
 
 /**
+ * Extract the media type from a Content-Type header value.
+ *
+ * Content-Type is case-insensitive per RFC 7231 and may carry optional
+ * parameters (e.g. `; charset=utf-8` or `; boundary=...`). Comparing the raw
+ * header with `includes` both rejects valid mixed-case media types and accepts
+ * unrelated types that merely contain the substring. Normalizing to lowercase
+ * and comparing only the media-type portion (everything before the first `;`)
+ * makes the match exact while still honoring parameterized variants.
+ *
+ * @param contentType - Raw Content-Type header value (may be empty)
+ * @returns Lowercased media type (e.g. `application/json`) or empty string
+ */
+function getMediaType(contentType: string): string {
+  const semicolonIndex = contentType.indexOf(";");
+  const mediaType = semicolonIndex === -1 ? contentType : contentType.slice(0, semicolonIndex);
+  return mediaType.trim().toLowerCase();
+}
+
+/**
  * Create Elysia app with all signup routes
  * @param context - Optional context for dependency injection (for testing)
  * @param elysiaOptions - Optional Elysia configuration options (e.g., { adapter: CloudflareAdapter })
@@ -159,28 +178,49 @@ export const createSignupRoutes = (
           )
           // Form POST endpoint (for HTML form submissions)
           .post("/signup/form", async ({ request, context, set }) => {
-            const contentType = request.headers.get("content-type") || "";
+            const mediaType = getMediaType(request.headers.get("content-type") || "");
 
-            let parsedForm: Record<string, string>;
-
-            if (contentType.includes("application/x-www-form-urlencoded")) {
-              const text = await request.text();
-              parsedForm = parseFormBody(text);
-            } else if (contentType.includes("multipart/form-data")) {
-              const data = await request.formData();
-              parsedForm = {};
-              for (const [key, value] of data.entries()) {
-                if (typeof value === "string") {
-                  parsedForm[key] = value;
-                }
-              }
-            } else {
+            // Strict media-type dispatch: only the two supported form types are
+            // accepted. Anything else is rejected with 415 before any body is
+            // read, leaving the strict media-type parser behavior unchanged.
+            if (
+              mediaType !== "application/x-www-form-urlencoded" &&
+              mediaType !== "multipart/form-data"
+            ) {
               set.status = 415;
               return {
                 success: false,
                 statusCode: 415,
                 error: "Unsupported Media Type",
                 details: ["Expected application/x-www-form-urlencoded or multipart/form-data"],
+              };
+            }
+
+            let parsedForm: Record<string, string>;
+
+            // Wrap only the body-parsing operations so a malformed or unparseable
+            // body (e.g. multipart missing its boundary) yields a 400 instead of
+            // leaking as a 500. Downstream signup/service errors are intentionally
+            // left outside this guard.
+            try {
+              if (mediaType === "application/x-www-form-urlencoded") {
+                const text = await request.text();
+                parsedForm = parseFormBody(text);
+              } else {
+                const data = await request.formData();
+                parsedForm = {};
+                for (const [key, value] of data.entries()) {
+                  if (typeof value === "string") {
+                    parsedForm[key] = value;
+                  }
+                }
+              }
+            } catch {
+              set.status = 400;
+              return {
+                success: false,
+                statusCode: 400,
+                error: "Malformed request body",
               };
             }
 

@@ -3,6 +3,11 @@
  */
 
 import { z } from "zod";
+import {
+  fetchWithTimeout,
+  readResponseJsonWithTimeout,
+  readResponseTextWithTimeout,
+} from "../utils/fetch";
 import { createChildLogger } from "../utils/logger";
 
 const logger = createChildLogger("turnstile");
@@ -48,7 +53,7 @@ export async function verifyTurnstileToken(
   try {
     logger.debug("Verifying Turnstile token");
 
-    const response = await fetch(TURNSTILE_SITEVERIFY_URL, {
+    const response = await fetchWithTimeout(TURNSTILE_SITEVERIFY_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -60,15 +65,21 @@ export async function verifyTurnstileToken(
     });
 
     if (!response.ok) {
-      const errorText = await response.text();
-      logger.error({ status: response.status, error: errorText }, "Turnstile API returned error");
+      // Consume the error body so the connection can be reused, but never log
+      // it: provider error responses may echo request data or sensitive
+      // diagnostics. Only status/statusText are logged as safe context.
+      await readResponseTextWithTimeout(response).catch(() => {});
+      logger.error(
+        { status: response.status, statusText: response.statusText },
+        "Turnstile API returned error",
+      );
       return {
         success: false,
         error: `API returned error: ${response.status} ${response.statusText}`,
       };
     }
 
-    const json = await response.json();
+    const json = await readResponseJsonWithTimeout(response);
     const data: TurnstileSiteverifyResponse = TurnstileSiteverifyResponseSchema.parse(json);
 
     if (data.success) {

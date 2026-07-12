@@ -153,4 +153,4 @@ export const mockTurnstileService = {
 };
 
 // Export internal state for advanced testing scenarios
-export { mockCalls, mockNextResult, mockError };
+export { mockCalls, mockError, mockNextResult };

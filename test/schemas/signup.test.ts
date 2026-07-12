@@ -3,7 +3,14 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import { bulkSignupSchema, extendedSignupSchema, signupSchema } from "../../src/schemas/signup";
+import {
+  bulkSignupSchema,
+  extendedSignupSchema,
+  MAX_METADATA_KEYS,
+  MAX_METADATA_SERIALIZED_LENGTH,
+  MAX_TURNSTILE_TOKEN_LENGTH,
+  signupSchema,
+} from "../../src/schemas/signup";
 
 describe("Signup Schema Validation", () => {
   describe("signupSchema", () => {
@@ -360,6 +367,183 @@ describe("Signup Schema Validation", () => {
 
       // Zod treats null differently based on schema
       // metadata is optional but if provided, it's a record
+      expect(result.success).toBe(false);
+    });
+  });
+
+  describe("metadata bounds", () => {
+    test("should accept exactly the maximum number of metadata keys", () => {
+      const metadata = Object.fromEntries(
+        Array.from({ length: MAX_METADATA_KEYS }, (_, i) => [`k${i}`, "v"]),
+      );
+
+      const result = signupSchema.safeParse({ email: "test@example.com", metadata });
+
+      expect(result.success).toBe(true);
+      expect(Object.keys(metadata)).toHaveLength(MAX_METADATA_KEYS);
+    });
+
+    test("should reject more than the maximum number of metadata keys", () => {
+      const metadata = Object.fromEntries(
+        Array.from({ length: MAX_METADATA_KEYS + 1 }, (_, i) => [`k${i}`, "v"]),
+      );
+
+      const result = signupSchema.safeParse({ email: "test@example.com", metadata });
+
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.issues.some((issue) => issue.message.includes("top-level keys"))).toBe(
+          true,
+        );
+      }
+    });
+
+    test("should accept metadata serialized at exactly the maximum length", () => {
+      // {"k":""} wraps the value; pad it so the serialized object hits the limit.
+      const overhead = '{"k":""}'.length;
+      const metadata = { k: "x".repeat(MAX_METADATA_SERIALIZED_LENGTH - overhead) };
+
+      const result = signupSchema.safeParse({ email: "test@example.com", metadata });
+
+      expect(JSON.stringify(metadata)).toHaveLength(MAX_METADATA_SERIALIZED_LENGTH);
+      expect(result.success).toBe(true);
+    });
+
+    test("should reject metadata serialized beyond the maximum length", () => {
+      const overhead = '{"k":""}'.length;
+      const metadata = { k: "x".repeat(MAX_METADATA_SERIALIZED_LENGTH - overhead + 1) };
+
+      const result = signupSchema.safeParse({ email: "test@example.com", metadata });
+
+      expect(JSON.stringify(metadata)).toHaveLength(MAX_METADATA_SERIALIZED_LENGTH + 1);
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.issues.some((issue) => issue.message.includes("too long"))).toBe(true);
+      }
+    });
+
+    test("should report a validation issue instead of throwing for circular metadata", () => {
+      const metadata: Record<string, unknown> = {};
+      metadata["self"] = metadata;
+
+      const parse = () => signupSchema.safeParse({ email: "test@example.com", metadata });
+      expect(parse).not.toThrow();
+      const result = signupSchema.safeParse({ email: "test@example.com", metadata });
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(
+          result.error.issues.some((issue) => issue.message.includes("JSON-serializable")),
+        ).toBe(true);
+      }
+    });
+
+    test("should report a validation issue instead of throwing for BigInt metadata", () => {
+      const metadata = { count: BigInt(1) };
+
+      const parse = () => signupSchema.safeParse({ email: "test@example.com", metadata });
+      expect(parse).not.toThrow();
+      const result = signupSchema.safeParse({ email: "test@example.com", metadata });
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(
+          result.error.issues.some((issue) => issue.message.includes("JSON-serializable")),
+        ).toBe(true);
+      }
+    });
+
+    test("should report a validation issue when JSON.stringify returns undefined", () => {
+      const metadata = { toJSON: () => undefined };
+
+      const parse = () => signupSchema.safeParse({ email: "test@example.com", metadata });
+      expect(parse).not.toThrow();
+      const result = parse();
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(
+          result.error.issues.some((issue) => issue.message.includes("JSON-serializable")),
+        ).toBe(true);
+      }
+    });
+  });
+
+  describe("turnstileToken length limit", () => {
+    test("should accept a signup-schema token at exactly the maximum length", () => {
+      const result = signupSchema.safeParse({
+        email: "test@example.com",
+        turnstileToken: "x".repeat(MAX_TURNSTILE_TOKEN_LENGTH),
+      });
+
+      expect(result.success).toBe(true);
+    });
+
+    test("should reject a signup-schema token one character over the maximum", () => {
+      const result = signupSchema.safeParse({
+        email: "test@example.com",
+        turnstileToken: "x".repeat(MAX_TURNSTILE_TOKEN_LENGTH + 1),
+      });
+
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(
+          result.error.issues.some((issue) =>
+            issue.message.includes(`max ${MAX_TURNSTILE_TOKEN_LENGTH} characters`),
+          ),
+        ).toBe(true);
+      }
+    });
+
+    test("should reject an overlong extended-signup token", () => {
+      const result = extendedSignupSchema.safeParse({
+        email: "test@example.com",
+        turnstileToken: "x".repeat(MAX_TURNSTILE_TOKEN_LENGTH + 1),
+      });
+
+      expect(result.success).toBe(false);
+    });
+
+    test("should accept a bulk request-level token at exactly the maximum length", () => {
+      const result = bulkSignupSchema.safeParse({
+        signups: [{ email: "valid@example.com" }],
+        turnstileToken: "x".repeat(MAX_TURNSTILE_TOKEN_LENGTH),
+      });
+
+      expect(result.success).toBe(true);
+    });
+
+    test("should reject a bulk request-level token one character over the maximum", () => {
+      const result = bulkSignupSchema.safeParse({
+        signups: [{ email: "valid@example.com" }],
+        turnstileToken: "x".repeat(MAX_TURNSTILE_TOKEN_LENGTH + 1),
+      });
+
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(
+          result.error.issues.some((issue) =>
+            issue.message.includes(`max ${MAX_TURNSTILE_TOKEN_LENGTH} characters`),
+          ),
+        ).toBe(true);
+      }
+    });
+
+    test("should bound the trimmed token: surrounding whitespace on a max-length token is accepted", () => {
+      // The bound is applied after trimming, so leading/trailing whitespace on a
+      // token whose inner value is exactly at the limit still passes.
+      const result = signupSchema.safeParse({
+        email: "test@example.com",
+        turnstileToken: `  ${"x".repeat(MAX_TURNSTILE_TOKEN_LENGTH)}  `,
+      });
+
+      expect(result.success).toBe(true);
+    });
+
+    test("should bound the trimmed token: a token that trims beyond the maximum is rejected", () => {
+      // Whitespace does not sneak an overlong value past the limit.
+      const result = signupSchema.safeParse({
+        email: "test@example.com",
+        turnstileToken: `  ${"x".repeat(MAX_TURNSTILE_TOKEN_LENGTH + 1)}  `,
+      });
+
       expect(result.success).toBe(false);
     });
   });

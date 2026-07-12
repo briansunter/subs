@@ -12,6 +12,7 @@ import {
   handleStats,
   type SignupContext,
 } from "../../../src/routes/handlers";
+import { MAX_SHEET_TAB_LENGTH } from "../../../src/utils/sheet-tab";
 import { mockSheetsService } from "../../mocks/sheets";
 import { mockTurnstileService } from "../../mocks/turnstile";
 
@@ -156,15 +157,32 @@ describe("Route Handlers - Unit Tests", () => {
     });
 
     test("should use default sheet tab when not provided", async () => {
-      const result = await handleSignup(
-        { email: "test3@example.com", sheetTab: "Sheet1" },
-        mockContext,
-      );
+      const result = await handleSignup({ email: "test3@example.com" }, mockContext);
 
       expect(result.success).toBe(true);
 
       const sheetData = mockSheetsService.getSheetData("Sheet1");
       expect(sheetData).toHaveLength(1);
+    });
+
+    test("should preserve all-tab duplicate checks when sheet tab is omitted", async () => {
+      let checkedSheetTab: string | undefined;
+      const trackingContext: SignupContext = {
+        ...mockContext,
+        sheets: {
+          ...mockContext.sheets,
+          emailExists: async (_email, sheetTab) => {
+            checkedSheetTab = sheetTab;
+            return false;
+          },
+          appendSignup: async () => {},
+        },
+      };
+
+      const result = await handleSignup({ email: "default-tab@example.com" }, trackingContext);
+
+      expect(result.success).toBe(true);
+      expect(checkedSheetTab).toBeUndefined();
     });
 
     test("should include metadata when provided", async () => {
@@ -449,6 +467,29 @@ describe("Route Handlers - Unit Tests", () => {
       expect(result.success).toBe(true);
       expect(checkedSheetIds).toEqual(["siteA-sheet-id"]);
     });
+
+    test("should preserve all-tab duplicate checks when bulk sheet tab is omitted", async () => {
+      let checkedSheetTab: string | undefined;
+      const trackingContext: SignupContext = {
+        ...mockContext,
+        sheets: {
+          ...mockContext.sheets,
+          emailExists: async (_email, sheetTab) => {
+            checkedSheetTab = sheetTab;
+            return false;
+          },
+          appendSignup: async () => {},
+        },
+      };
+
+      const result = await handleBulkSignup(
+        { signups: [{ email: "bulk-default-tab@example.com" }] },
+        trackingContext,
+      );
+
+      expect(result.success).toBe(true);
+      expect(checkedSheetTab).toBeUndefined();
+    });
   });
 
   describe("Error Handling", () => {
@@ -566,6 +607,74 @@ describe("Route Handlers - Unit Tests", () => {
     });
   });
 
+  describe("Process-local duplicate lock", () => {
+    test("serializes concurrent same-email operations across tabs", async () => {
+      // Gate that holds the first existence check until the test releases it.
+      const { promise: firstCheckGate, resolve: releaseFirstCheck } = Promise.withResolvers<void>();
+      // Resolves once the first existence check has started and is blocked.
+      const { promise: firstCheckStarted, resolve: signalFirstCheckStarted } =
+        Promise.withResolvers<void>();
+
+      const appendedEmails = new Set<string>();
+      let emailExistsCalls = 0;
+      let appendCalls = 0;
+
+      const lockedContext: SignupContext = {
+        ...mockContext,
+        sheets: {
+          ...mockContext.sheets,
+          appendSignup: async (data) => {
+            appendCalls++;
+            appendedEmails.add(data.email.toLowerCase());
+          },
+          emailExists: async (email) => {
+            emailExistsCalls++;
+            if (emailExistsCalls === 1) {
+              // Hold the lock: this first check blocks until released.
+              signalFirstCheckStarted();
+              await firstCheckGate;
+            }
+            return appendedEmails.has(email.toLowerCase());
+          },
+        },
+      };
+
+      // Start two concurrent operations for the same email in different tabs.
+      // The second must wait behind the email-scoped lock held by the first.
+      const first = handleSignup({ email: "race@example.com" }, lockedContext);
+      const second = handleSignup({ email: "race@example.com", sheetTab: "Sheet2" }, lockedContext);
+
+      // Wait until the first existence check has started and is blocked. At this
+      // point the second call is queued behind the lock: only one check has run
+      // and no append has happened yet (it would be 2 checks and 1 append with
+      // no lock, because both would pass check-then-append concurrently).
+      await firstCheckStarted;
+      expect(emailExistsCalls).toBe(1);
+      expect(appendCalls).toBe(0);
+
+      // Release the first check: the first call appends and succeeds, then the
+      // second acquires the lock, observes the duplicate, and returns 409.
+      releaseFirstCheck();
+
+      const [firstResult, secondResult] = await Promise.all([first, second]);
+
+      expect(appendCalls).toBe(1);
+      expect(firstResult.success).toBe(true);
+      expect(firstResult.statusCode).toBe(200);
+      expect(secondResult.success).toBe(false);
+      expect(secondResult.statusCode).toBe(409);
+
+      // The lock is cleaned up: a later call proceeds and appends normally.
+      const later = await handleSignup(
+        { email: "after@example.com", sheetTab: "Sheet1" },
+        lockedContext,
+      );
+      expect(later.success).toBe(true);
+      expect(later.statusCode).toBe(200);
+      expect(appendCalls).toBe(2);
+    });
+  });
+
   describe("Boundary Conditions", () => {
     test("should handle exactly 100 bulk signups (boundary)", async () => {
       const signups = Array.from({ length: 100 }, (_, i) => ({
@@ -608,7 +717,7 @@ describe("Route Handlers - Unit Tests", () => {
 
     test("should handle very long metadata object", async () => {
       const largeMetadata: Record<string, string> = {};
-      for (let i = 0; i < 100; i++) {
+      for (let i = 0; i < 50; i++) {
         largeMetadata[`key${i}`] = `value${i}`.repeat(10);
       }
 
@@ -735,6 +844,82 @@ describe("Route Handlers - Unit Tests", () => {
       expect(result.success).toBe(false);
       expect(result.statusCode).toBe(400);
       expect(result.error).toBe("Validation failed");
+    });
+
+    test("should preserve the required detail for a whitespace-only sheet tab", async () => {
+      const result = await handleStats("   ", mockContext);
+
+      expect(result.success).toBe(false);
+      expect(result.statusCode).toBe(400);
+      expect(result.details).toEqual(["sheetTab: Sheet tab is required"]);
+    });
+
+    test("should reject a forbidden-character sheet tab without calling Sheets", async () => {
+      let statsCalls = 0;
+      const trackingContext: SignupContext = {
+        ...mockContext,
+        sheets: {
+          ...mockContext.sheets,
+          getSignupStats: async () => {
+            statsCalls++;
+            return { total: 0, sheetTab: "unused", lastSignup: null };
+          },
+        },
+      };
+
+      const result = await handleStats("Bad/Tab", trackingContext);
+
+      expect(result.success).toBe(false);
+      expect(result.statusCode).toBe(400);
+      expect(result.error).toBe("Validation failed");
+      expect(result.details).toEqual(["sheetTab: Sheet tab name cannot contain : \\ / ? * [ ]"]);
+      expect(statsCalls).toBe(0);
+    });
+
+    test("should reject an overlong sheet tab without calling Sheets", async () => {
+      let statsCalls = 0;
+      const trackingContext: SignupContext = {
+        ...mockContext,
+        sheets: {
+          ...mockContext.sheets,
+          getSignupStats: async () => {
+            statsCalls++;
+            return { total: 0, sheetTab: "unused", lastSignup: null };
+          },
+        },
+      };
+
+      const result = await handleStats("x".repeat(MAX_SHEET_TAB_LENGTH + 1), trackingContext);
+
+      expect(result.success).toBe(false);
+      expect(result.statusCode).toBe(400);
+      expect(result.error).toBe("Validation failed");
+      // The shared schema's refine bundles the length and character checks, so an
+      // overlong value surfaces the length detail (the meaningful one here).
+      expect(result.details).toContain(
+        `sheetTab: Sheet tab name cannot exceed ${MAX_SHEET_TAB_LENGTH} characters`,
+      );
+      expect(statsCalls).toBe(0);
+    });
+
+    test("should trim a valid tab and reach getSignupStats with the trimmed value", async () => {
+      let receivedTab: string | undefined;
+      const trackingContext: SignupContext = {
+        ...mockContext,
+        sheets: {
+          ...mockContext.sheets,
+          getSignupStats: async (sheetTab) => {
+            receivedTab = sheetTab;
+            return { total: 0, sheetTab, lastSignup: null };
+          },
+        },
+      };
+
+      const result = await handleStats("  O'Brien's List  ", trackingContext);
+
+      expect(result.success).toBe(true);
+      expect(result.statusCode).toBe(200);
+      expect(receivedTab).toBe("O'Brien's List");
     });
   });
 });

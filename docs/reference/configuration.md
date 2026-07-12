@@ -106,6 +106,7 @@ ALLOWED_SHEETS=abc123:blog,def456:landing-page
 
 Available sheet tabs (comma-separated). Default: `[DEFAULT_SHEET_TAB]`
 The same Google Sheets tab name restrictions apply to each value.
+When set, `DEFAULT_SHEET_TAB` must be included in the list.
 
 ```bash
 SHEET_TABS=Sheet1,Newsletter,Beta
@@ -161,7 +162,7 @@ LOG_LEVEL=warn
 
 ## Validation
 
-The API validates all environment variables on startup using Zod. Missing or invalid required variables cause the server to fail with an error message.
+The API validates all environment variables on startup using Zod. Missing or invalid required variables cause the server to fail with an error message. Duplicate entries are rejected to fail fast on ambiguous configuration: `ALLOWED_SHEETS` rejects repeated site names (duplicate sheet IDs with distinct site names are allowed), and `SHEET_TABS` rejects repeated tab names after trimming. When `SHEET_TABS` is configured, `DEFAULT_SHEET_TAB` must be present in the list so the fallback tab is always available.
 
 | Variable | Validation |
 |----------|------------|
@@ -171,8 +172,8 @@ The API validates all environment variables on startup using Zod. Missing or inv
 | `PORT` | Integer 1-65535 |
 | `ALLOWED_ORIGINS` | `*` or comma-separated `http://` / `https://` origins without paths |
 | `ENABLE_METRICS` | `"true"` or `"false"` |
-| `ALLOWED_SHEETS` | `sheetId:siteName,...` format |
-| `DEFAULT_SHEET_TAB`, `SHEET_TABS` | Valid Google Sheets tab names |
+| `ALLOWED_SHEETS` | `sheetId:siteName,...` format; duplicate site names are rejected |
+| `DEFAULT_SHEET_TAB`, `SHEET_TABS` | Valid Google Sheets tab names; duplicate tabs are rejected; `DEFAULT_SHEET_TAB` must be listed in `SHEET_TABS` when `SHEET_TABS` is set |
 | `LOG_LEVEL` | Valid Pino log level |
 
 ### Clearing Config Cache (Testing)

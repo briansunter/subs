@@ -11,6 +11,7 @@ import {
   type ExtendedSignupInput,
   extendedSignupSchema,
   type SignupInput,
+  sheetTabSchema,
   signupSchema,
 } from "../schemas/signup";
 import {
@@ -218,6 +219,63 @@ function buildBulkSignupResponse(results: BulkSignupResults): HandlerResult {
 }
 
 /**
+ * Process-local keyed async locks that turn each email existence check plus
+ * append into a single critical section, keyed by the resolved (sheet, email)
+ * pair. This prevents two concurrent same-email check-then-append operations
+ * in this process/Worker isolate from both observing "does not exist" and
+ * appending a duplicate signup, including when one check searches all tabs.
+ *
+ * This is strictly best-effort, process-local deduplication. It does NOT
+ * provide cross-process, cross-container, or cross-Worker uniqueness; Google
+ * Sheets remains the source of truth.
+ */
+const signupLocks = new Map<string, Promise<unknown>>();
+
+/**
+ * Run `fn` while holding a process-local lock on `key`. Concurrent callers for
+ * the same key execute serially in arrival order; callers for different keys
+ * execute concurrently. Different keys are never serialized behind each other.
+ *
+ * The lock entry is always released and removed on success, duplicate, and
+ * error paths: a rejected operation cannot poison later requests or leak keys
+ * indefinitely. The `next` promise only ever resolves (never rejects), so
+ * awaiting a prior holder cannot throw.
+ */
+async function withKeyedLock<T>(key: string, fn: () => Promise<T>): Promise<T> {
+  // Current tail of this key's wait chain, if any.
+  const previous = signupLocks.get(key);
+  // Our release promise becomes the new tail that later callers chain onto.
+  const { promise: next, resolve: release } = Promise.withResolvers<void>();
+  signupLocks.set(key, next);
+
+  try {
+    if (previous) {
+      await previous;
+    }
+    return await fn();
+  } finally {
+    release();
+    // Drop our entry only if we are still the tail, so a later waiter that has
+    // already registered its own tail is not removed out from under it.
+    if (signupLocks.get(key) === next) {
+      signupLocks.delete(key);
+    }
+  }
+}
+
+/**
+ * Build an unambiguous process-local lock key from the resolved sheet ID and
+ * normalized lowercase email. The lock is email-scoped rather than tab-scoped
+ * because an omitted tab means the duplicate check searches every tab. This
+ * serializes same-email operations across tabs while allowing different emails
+ * to proceed concurrently. JSON.stringify escapes every component, so distinct
+ * (sheet, email) pairs never collide.
+ */
+function buildSignupLockKey(sheetId: string, email: string): string {
+  return JSON.stringify([sheetId, email.toLowerCase()]);
+}
+
+/**
  * Common signup processing flow
  * Handles validation, turnstile verification, duplicate checking, and storage
  *
@@ -244,45 +302,60 @@ async function processSignupRequest<
   const startTime = Date.now();
 
   try {
-    // Validate Turnstile token if configured
+    // Validate Turnstile token if configured. Done before acquiring the lock so
+    // the lock is never held while verifying Turnstile.
     const turnstileResult = await validateTurnstileToken(data.turnstileToken, ctx);
     if (turnstileResult) {
       return turnstileResult;
     }
 
-    // Check if email already exists
-    const sheetsStartTime = Date.now();
-    let exists = false;
     const resolvedConfig = data.resolvedSheetId
       ? { ...ctx.config, googleSheetId: data.resolvedSheetId }
       : ctx.config;
-    try {
-      exists = await ctx.sheets.emailExists(data.email, data.sheetTab, resolvedConfig);
-      recordSheetsRequest("emailExists", true, (Date.now() - sheetsStartTime) / 1000);
-    } catch (error) {
-      recordSheetsRequest("emailExists", false, (Date.now() - sheetsStartTime) / 1000);
-      throw error;
-    }
+    // Lock the resolved (sheet, email) pair so the existence check and append
+    // form one critical section. Process-local best effort.
+    const lockKey = buildSignupLockKey(resolvedConfig.googleSheetId, data.email);
 
-    if (exists) {
+    const isDuplicate = await withKeyedLock(lockKey, async (): Promise<boolean> => {
+      // Check if email already exists
+      const sheetsStartTime = Date.now();
+      let exists = false;
+      try {
+        exists = await ctx.sheets.emailExists(data.email, data.sheetTab, resolvedConfig);
+        recordSheetsRequest("emailExists", true, (Date.now() - sheetsStartTime) / 1000);
+      } catch (error) {
+        recordSheetsRequest("emailExists", false, (Date.now() - sheetsStartTime) / 1000);
+        throw error;
+      }
+
+      if (exists) {
+        return true;
+      }
+
+      // Store in Google Sheets
+      const appendStartTime = Date.now();
+      try {
+        await ctx.sheets.appendSignup(buildSignupData(data), resolvedConfig);
+        recordSheetsRequest("appendSignup", true, (Date.now() - appendStartTime) / 1000);
+      } catch (error) {
+        recordSheetsRequest("appendSignup", false, (Date.now() - appendStartTime) / 1000);
+        throw error;
+      }
+
+      // Raw email is intentionally omitted from logs to avoid emitting PII.
+      // The message string carries the operation; sheet/lock context is not PII.
+      logger.info(logMessage);
+      return false;
+    });
+
+    if (isDuplicate) {
+      // Duplicates intentionally do not record a signup metric, matching prior behavior.
       return {
         success: false,
         statusCode: 409,
         error: "Email already registered",
       };
     }
-
-    // Store in Google Sheets
-    const appendStartTime = Date.now();
-    try {
-      await ctx.sheets.appendSignup(buildSignupData(data), resolvedConfig);
-      recordSheetsRequest("appendSignup", true, (Date.now() - appendStartTime) / 1000);
-    } catch (error) {
-      recordSheetsRequest("appendSignup", false, (Date.now() - appendStartTime) / 1000);
-      throw error;
-    }
-
-    logger.info({ email: data.email }, logMessage);
 
     const duration = (Date.now() - startTime) / 1000;
     recordSignup(route, true, duration);
@@ -415,58 +488,73 @@ export async function handleBulkSignup(
         }
 
         const targetSheetTab = signup.sheetTab || ctx.config.defaultSheetTab;
-        const requestDedupeKey = [
+        // Keep in-request deduplication scoped to the target tab, while the
+        // process-local lock below is scoped to sheet/email so all-tab checks
+        // cannot race with operations targeting another tab.
+        const requestDedupeKey = JSON.stringify([
           siteResolution.sheetId,
           targetSheetTab,
-          signup.email.toLowerCase(),
-        ].join("\0");
+          signup.email,
+        ]);
 
         if (successfulSignups.has(requestDedupeKey)) {
           results.duplicates++;
           continue;
         }
 
-        // Check if email already exists
-        const sheetsStartTime = Date.now();
         const resolvedConfig = { ...ctx.config, googleSheetId: siteResolution.sheetId };
-        let exists = false;
-        try {
-          exists = await ctx.sheets.emailExists(signup.email, targetSheetTab, resolvedConfig);
-          recordSheetsRequest("emailExists", true, (Date.now() - sheetsStartTime) / 1000);
-        } catch (error) {
-          recordSheetsRequest("emailExists", false, (Date.now() - sheetsStartTime) / 1000);
-          throw error;
-        }
 
-        if (exists) {
+        const lockKey = buildSignupLockKey(siteResolution.sheetId, signup.email);
+        const isDuplicate = await withKeyedLock(lockKey, async (): Promise<boolean> => {
+          // Check if email already exists
+          const sheetsStartTime = Date.now();
+          let exists = false;
+          try {
+            exists = await ctx.sheets.emailExists(signup.email, signup.sheetTab, resolvedConfig);
+            recordSheetsRequest("emailExists", true, (Date.now() - sheetsStartTime) / 1000);
+          } catch (error) {
+            recordSheetsRequest("emailExists", false, (Date.now() - sheetsStartTime) / 1000);
+            throw error;
+          }
+
+          if (exists) {
+            return true;
+          }
+
+          // Store in Google Sheets
+          const appendStartTime = Date.now();
+          try {
+            await ctx.sheets.appendSignup(
+              {
+                email: signup.email,
+                timestamp: new Date().toISOString(),
+                sheetTab: targetSheetTab,
+                sheetId: siteResolution.sheetId,
+                metadata: signup.metadata ? JSON.stringify(signup.metadata) : undefined,
+              },
+              resolvedConfig,
+            );
+            recordSheetsRequest("appendSignup", true, (Date.now() - appendStartTime) / 1000);
+          } catch (error) {
+            recordSheetsRequest("appendSignup", false, (Date.now() - appendStartTime) / 1000);
+            throw error;
+          }
+
+          return false;
+        });
+
+        if (isDuplicate) {
           results.duplicates++;
           continue;
-        }
-
-        // Store in Google Sheets
-        const appendStartTime = Date.now();
-        try {
-          await ctx.sheets.appendSignup(
-            {
-              email: signup.email,
-              timestamp: new Date().toISOString(),
-              sheetTab: targetSheetTab,
-              sheetId: siteResolution.sheetId,
-              metadata: signup.metadata ? JSON.stringify(signup.metadata) : undefined,
-            },
-            resolvedConfig,
-          );
-          recordSheetsRequest("appendSignup", true, (Date.now() - appendStartTime) / 1000);
-        } catch (error) {
-          recordSheetsRequest("appendSignup", false, (Date.now() - appendStartTime) / 1000);
-          throw error;
         }
 
         successfulSignups.add(requestDedupeKey);
         results.success++;
       } catch (error) {
         results.failed++;
-        logger.error({ error, email: signup.email }, "Individual signup failed in bulk operation");
+        // The submitted email remains in the API response (results.errors) for
+        // client correlation, but is omitted from logs to avoid emitting PII.
+        logger.error({ error }, "Individual signup failed in bulk operation");
         results.errors.push(
           `${signup.email}: ${error instanceof Error ? error.message : String(error)}`,
         );
@@ -523,7 +611,7 @@ export async function handleStats(
   sheetTab: string | undefined,
   ctx: SignupContext,
 ): Promise<HandlerResult> {
-  if (!sheetTab || !sheetTab.trim()) {
+  if (!sheetTab?.trim()) {
     return {
       success: false,
       statusCode: 400,
@@ -532,9 +620,23 @@ export async function handleStats(
     };
   }
 
+  // Reuse the same tab-name rules as signup inputs. This rejects forbidden
+  // characters and overlong tab names before any Sheets service call, mapping
+  // each issue into a `sheetTab: ...` detail.
+  const tabValidation = sheetTabSchema.safeParse(sheetTab);
+  if (!tabValidation.success) {
+    const details = tabValidation.error.issues.map((issue) => `sheetTab: ${issue.message}`);
+    return {
+      success: false,
+      statusCode: 400,
+      error: "Validation failed",
+      details,
+    };
+  }
+
   const startTime = Date.now();
   try {
-    const stats = await ctx.sheets.getSignupStats(sheetTab.trim(), ctx.config);
+    const stats = await ctx.sheets.getSignupStats(tabValidation.data, ctx.config);
     recordSheetsRequest("getSignupStats", true, (Date.now() - startTime) / 1000);
     return {
       success: true,

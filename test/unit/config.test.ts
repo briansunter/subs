@@ -308,4 +308,132 @@ describe("Configuration - Unit Tests", () => {
       );
     });
   });
+
+  describe("Duplicate Entry Rejection", () => {
+    test("should reject ALLOWED_SHEETS with duplicate site names", () => {
+      expect(() => loadConfig({ ALLOWED_SHEETS: "sheet1:blog,sheet2:blog" })).toThrow(
+        "ALLOWED_SHEETS contains duplicate site name: blog",
+      );
+    });
+
+    test("should reject ALLOWED_SHEETS with duplicate site names after trimming", () => {
+      expect(() => loadConfig({ ALLOWED_SHEETS: "sheet1:blog, sheet2: blog" })).toThrow(
+        "ALLOWED_SHEETS contains duplicate site name: blog",
+      );
+    });
+
+    test("should accept ALLOWED_SHEETS with duplicate sheet IDs when site names differ", () => {
+      const config = loadConfig({ ALLOWED_SHEETS: "sheet1:blog,sheet1:landing-page" });
+
+      expect(config.allowedSheets.get("blog")).toBe("sheet1");
+      expect(config.allowedSheets.get("landing-page")).toBe("sheet1");
+      expect(config.allowedSheets.size).toBe(2);
+    });
+
+    test("should accept ALLOWED_SHEETS with distinct valid mappings", () => {
+      const config = loadConfig({ ALLOWED_SHEETS: "abc123:blog,def456:landing-page" });
+
+      expect(config.allowedSheets.get("blog")).toBe("abc123");
+      expect(config.allowedSheets.get("landing-page")).toBe("def456");
+      expect(config.allowedSheets.size).toBe(2);
+    });
+
+    test("should keep invalid-mapping validation alongside duplicate detection", () => {
+      expect(() => loadConfig({ ALLOWED_SHEETS: "blog,sheet2:blog" })).toThrow(
+        "ALLOWED_SHEETS contains invalid mapping: blog",
+      );
+    });
+
+    test("should reject SHEET_TABS with duplicate tab names", () => {
+      expect(() => loadConfig({ SHEET_TABS: "Sheet1,Newsletter,Sheet1" })).toThrow(
+        "SHEET_TABS contains duplicate sheet tab: Sheet1",
+      );
+    });
+
+    test("should reject SHEET_TABS with duplicate tab names after trimming", () => {
+      expect(() => loadConfig({ SHEET_TABS: "Newsletter, Newsletter" })).toThrow(
+        "SHEET_TABS contains duplicate sheet tab: Newsletter",
+      );
+    });
+
+    test("should accept SHEET_TABS with distinct valid tabs", () => {
+      const config = loadConfig({ SHEET_TABS: "Sheet1,Newsletter,Beta" });
+
+      expect(config.sheetTabs).toEqual(["Sheet1", "Newsletter", "Beta"]);
+    });
+
+    test("should keep invalid-tab validation alongside duplicate detection", () => {
+      expect(() => loadConfig({ SHEET_TABS: "Sheet1,Sheet1,Bad/Tab" })).toThrow(
+        "Sheet tab name cannot contain",
+      );
+    });
+  });
+
+  describe("Cross-Field Validation (DEFAULT_SHEET_TAB in SHEET_TABS)", () => {
+    test("should accept SHEET_TABS that includes the default DEFAULT_SHEET_TAB", () => {
+      const config = loadConfig({ SHEET_TABS: "Sheet1,Newsletter" });
+
+      expect(config.defaultSheetTab).toBe("Sheet1");
+      expect(config.sheetTabs).toEqual(["Sheet1", "Newsletter"]);
+    });
+
+    test("should accept SHEET_TABS that includes a custom DEFAULT_SHEET_TAB", () => {
+      const config = loadConfig({
+        DEFAULT_SHEET_TAB: "Newsletter",
+        SHEET_TABS: "Sheet1,Newsletter,Beta",
+      });
+
+      expect(config.defaultSheetTab).toBe("Newsletter");
+      expect(config.sheetTabs).toEqual(["Sheet1", "Newsletter", "Beta"]);
+    });
+
+    test("should accept SHEET_TABS containing only DEFAULT_SHEET_TAB", () => {
+      const config = loadConfig({
+        DEFAULT_SHEET_TAB: "Newsletter",
+        SHEET_TABS: "Newsletter",
+      });
+
+      expect(config.sheetTabs).toEqual(["Newsletter"]);
+    });
+
+    test("should accept DEFAULT_SHEET_TAB matched after trimming in SHEET_TABS", () => {
+      const config = loadConfig({
+        DEFAULT_SHEET_TAB: "Newsletter",
+        SHEET_TABS: "Sheet1, Newsletter , Beta",
+      });
+
+      expect(config.sheetTabs).toEqual(["Sheet1", "Newsletter", "Beta"]);
+    });
+
+    test("should reject SHEET_TABS that omits the default DEFAULT_SHEET_TAB", () => {
+      expect(() => loadConfig({ SHEET_TABS: "Newsletter,Beta" })).toThrow(
+        "must be present in SHEET_TABS when SHEET_TABS is configured",
+      );
+    });
+
+    test("should reject SHEET_TABS that omits a custom DEFAULT_SHEET_TAB", () => {
+      expect(() =>
+        loadConfig({ DEFAULT_SHEET_TAB: "Waitlist", SHEET_TABS: "Sheet1,Newsletter" }),
+      ).toThrow("DEFAULT_SHEET_TAB (Waitlist) must be present in SHEET_TABS");
+    });
+
+    test("should match DEFAULT_SHEET_TAB case-sensitively", () => {
+      expect(() =>
+        loadConfig({ DEFAULT_SHEET_TAB: "Sheet1", SHEET_TABS: "sheet1,Newsletter" }),
+      ).toThrow("must be present in SHEET_TABS when SHEET_TABS is configured");
+    });
+
+    test("should not apply the cross-field check when SHEET_TABS is unset", () => {
+      const config = loadConfig({ DEFAULT_SHEET_TAB: "Newsletter" });
+
+      expect(config.defaultSheetTab).toBe("Newsletter");
+      expect(config.sheetTabs).toEqual(["Newsletter"]);
+    });
+
+    test("should keep duplicate detection intact when DEFAULT_SHEET_TAB is present", () => {
+      expect(() =>
+        loadConfig({ DEFAULT_SHEET_TAB: "Sheet1", SHEET_TABS: "Sheet1,Newsletter,Sheet1" }),
+      ).toThrow("SHEET_TABS contains duplicate sheet tab: Sheet1");
+    });
+  });
 });

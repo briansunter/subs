@@ -18,13 +18,36 @@ function escapeHtml(str: string): string {
 }
 
 /**
+ * Serialize a value for safe embedding inside an inline <script> element.
+ * JSON.stringify yields a valid JS literal, but on its own it does not stop a
+ * value containing "</script>", "<", ">", "&", or the Unicode line separators
+ * U+2028/U+2029 from terminating the script element or breaking the JS string
+ * literal. Escape those characters as JS escape sequences after serialization
+ * so the runtime value is unchanged while the source stays inert.
+ */
+function scriptValue(value: unknown): string {
+  return JSON.stringify(value)
+    .replace(/</g, "\\u003c")
+    .replace(/>/g, "\\u003e")
+    .replace(/&/g, "\\u0026")
+    .replace(/\u2028/g, "\\u2028")
+    .replace(/\u2029/g, "\\u2029");
+}
+
+/**
  * Generate HTML form content with dynamic sheet tabs
  */
 export function getHtmlFormContent(config: SignupConfig): string {
+  // Select the configured default tab rather than always the first tab. Use the
+  // first matching occurrence; if the default is absent from sheetTabs (e.g. a
+  // hand-built SignupConfig), fall back to index 0 so the select keeps one
+  // selected option and submitted value stays safe.
+  const defaultTabIndex = config.sheetTabs.indexOf(config.defaultSheetTab);
+  const selectedIndex = defaultTabIndex === -1 ? 0 : defaultTabIndex;
   const sheetTabOptions = config.sheetTabs
     .map(
       (tab, i) =>
-        `<option value="${escapeHtml(tab)}"${i === 0 ? " selected" : ""}>${escapeHtml(tab)}</option>`,
+        `<option value="${escapeHtml(tab)}"${i === selectedIndex ? " selected" : ""}>${escapeHtml(tab)}</option>`,
     )
     .join("\n          ");
 
@@ -229,8 +252,8 @@ export function getHtmlFormContent(config: SignupConfig): string {
 
     // Get configuration from URL params
     const urlParams = new URLSearchParams(window.location.search);
-    const turnstileRequired = ${JSON.stringify(Boolean(config.turnstileSecretKey))};
-    const turnstileSiteKey = ${JSON.stringify(config.turnstileSiteKey ?? null)};
+    const turnstileRequired = ${scriptValue(Boolean(config.turnstileSecretKey))};
+    const turnstileSiteKey = ${scriptValue(config.turnstileSiteKey ?? null)};
     const apiParam = urlParams.get('api');
     const apiEndpoint = isValidApiEndpoint(apiParam) ? apiParam : '/api/signup/extended';
     const redirectUrl = urlParams.get('redirect');
@@ -247,18 +270,31 @@ export function getHtmlFormContent(config: SignupConfig): string {
       }
     }
 
-    // Validated parent origin for postMessage (set when receiving messages)
+    // Validated parent origin for postMessage (set when the parent completes
+    // the origin handshake). When null, notifyParent derives a trustworthy
+    // origin from document.referrer instead of ever posting to a wildcard.
     let validatedParentOrigin = null;
 
+    // Origins permitted to embed this form and receive postMessage
+    // notifications. Hoisted to script scope so both the parent handshake and
+    // the referrer-based fallback consult the same allow list.
+    const allowedOrigins = ${scriptValue(config.allowedOrigins)};
+
     /**
-     * Validate redirect URL to prevent open redirect attacks
-     * Only allows relative paths (starting with /) or same-origin URLs
+     * Validate redirect URL to prevent open redirect attacks.
+     * Only allows relative paths or same-origin absolute URLs.
      */
     function isValidRedirectUrl(url) {
       if (!url) return false;
-      // Allow relative paths (but not protocol-relative URLs like //)
-      if (url.startsWith('/') && !url.startsWith('//')) return true;
+      // Reject protocol-relative URLs (//host/path) outright. They inherit the
+      // page's scheme, so a same-host variant like //example.com/thanks would
+      // resolve to the form origin and pass a pure origin comparison.
+      if (url.startsWith('//')) return false;
       try {
+        // Browsers (and the URL parser) normalize backslashes to slashes in
+        // special-scheme URLs, so /\\evil.example resolves to https://evil.example.
+        // A starts-with-slash check cannot catch that, so validate the parsed
+        // origin instead to permit only relative paths and same-origin absolute URLs.
         const redirectOrigin = new URL(url, window.location.origin).origin;
         return redirectOrigin === window.location.origin;
       } catch {
@@ -268,8 +304,16 @@ export function getHtmlFormContent(config: SignupConfig): string {
 
     function isValidApiEndpoint(url) {
       if (!url) return false;
-      if (url.startsWith('/') && !url.startsWith('//')) return true;
+      // Reject protocol-relative URLs (//host/path) outright. They inherit the
+      // page's scheme, so a same-host variant like //example.com/api would
+      // resolve to the form origin and pass a pure origin comparison.
+      if (url.startsWith('//')) return false;
       try {
+        // Browsers (and the URL parser) normalize backslashes to slashes in
+        // special-scheme URLs, so /\\evil.example resolves to https://evil.example.
+        // A starts-with-slash check cannot catch that, so validate the parsed
+        // origin instead to permit only relative API paths and same-origin
+        // absolute URLs.
         const endpointOrigin = new URL(url, window.location.origin).origin;
         return endpointOrigin === window.location.origin;
       } catch {
@@ -452,10 +496,18 @@ export function getHtmlFormContent(config: SignupConfig): string {
       }
     });
 
-    // Allow postMessage communication from parent iframe
+    // Allow postMessage communication from the parent iframe only. Accepting
+    // messages from any other frame would let an unrelated window complete the
+    // origin handshake and prime validatedParentOrigin, or exfiltrate form data
+    // via the getFormData reply.
     window.addEventListener('message', (event) => {
+      // Only the actual parent window may complete the handshake or request
+      // form data. event.source is set by the browser and cannot be spoofed by
+      // the sender, so it reliably identifies the message's true source.
+      if (event.source !== window.parent) {
+        return;
+      }
       // Validate origin for security
-      const allowedOrigins = ${JSON.stringify(config.allowedOrigins)};
       if (allowedOrigins.includes('*') || allowedOrigins.includes(event.origin)) {
         // Store validated parent origin for secure postMessage responses
         validatedParentOrigin = event.origin;
@@ -470,10 +522,59 @@ export function getHtmlFormContent(config: SignupConfig): string {
       }
     });
 
-    // Notify parent when form is submitted successfully
-    // Uses validated parent origin instead of wildcard for security
+    // Resolve a concrete, trustworthy origin to target for parent
+    // notifications, or null when no such origin can be established. Never
+    // returns a wildcard: posting to "*" would broadcast the submitted email
+    // to any window listening for messages.
+    //
+    // Precedence:
+    //   1. Top-level form use (window.parent === window): there is no parent
+    //      to notify, so direct top-level use is unaffected.
+    //   2. A parent-handshake-validated origin: event.origin is browser-verified
+    //      when the handshake message arrived, so it is always trusted.
+    //   3. The embedding page's origin derived from document.referrer, but only
+    //      when it is an explicitly allowed origin (or the deployment allows
+    //      any origin via "*"). Missing, unparseable, opaque, or disallowed
+    //      referrers yield no notification.
+    function resolveParentOrigin() {
+      // Top-level browsing context: nothing to notify.
+      if (window.parent === window) {
+        return null;
+      }
+      if (validatedParentOrigin) {
+        return validatedParentOrigin;
+      }
+      // Derive the embedding page's origin from the referrer the browser
+      // recorded when loading this iframe.
+      if (!document.referrer) {
+        return null;
+      }
+      let referrerOrigin;
+      try {
+        referrerOrigin = new URL(document.referrer).origin;
+      } catch {
+        return null;
+      }
+      // Reject opaque origins (the string "null" from data:/sandboxed sources)
+      // and any origin not on the allow list. The wildcard entry permits any
+      // concrete origin; otherwise require an exact match.
+      if (
+        referrerOrigin &&
+        referrerOrigin !== 'null' &&
+        (allowedOrigins.includes('*') || allowedOrigins.includes(referrerOrigin))
+      ) {
+        return referrerOrigin;
+      }
+      return null;
+    }
+
+    // Notify parent when the form is submitted. Posts only to the concrete
+    // origin resolved above, or sends nothing when no trustworthy origin exists.
     function notifyParent(type, data) {
-      const targetOrigin = validatedParentOrigin || '*';
+      const targetOrigin = resolveParentOrigin();
+      if (!targetOrigin) {
+        return;
+      }
       window.parent.postMessage({
         type: 'signup',
         status: type,

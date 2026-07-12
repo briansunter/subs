@@ -141,7 +141,7 @@ describe.serial("Error Scenarios - Elysia Handle Tests", () => {
       const app = await getTestApp();
 
       const largeMetadata: Record<string, string> = {};
-      for (let i = 0; i < 100; i++) {
+      for (let i = 0; i < 50; i++) {
         largeMetadata[`key${i}`] = "x".repeat(100);
       }
 

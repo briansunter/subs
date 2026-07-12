@@ -41,8 +41,8 @@ Basic email signup.
 | `email` | string | Yes | Valid email address |
 | `sheetTab` | string | No | Target sheet tab (default: `DEFAULT_SHEET_TAB`, max 100 chars, cannot contain `: \ / ? * [ ]`) |
 | `site` | string | No | Site name for multi-site support (max 100 chars) |
-| `metadata` | object | No | Arbitrary key-value metadata |
-| `turnstileToken` | string | No | Required if Turnstile is configured |
+| `metadata` | object | No | Arbitrary key-value metadata (max 50 top-level keys; max 10,000 chars when JSON-serialized; must be JSON-serializable) |
+| `turnstileToken` | string | No | Required if Turnstile is configured (max 4,096 chars) |
 
 **Success (200)**:
 ```json
@@ -61,6 +61,10 @@ Basic email signup.
   "error": "Email already registered"
 }
 ```
+
+When `sheetTab` is provided, duplicate checks are scoped to that tab. When it is
+omitted, an existing email in any tab is treated as a duplicate before the
+signup is written to `DEFAULT_SHEET_TAB`.
 
 **Validation error (400)**:
 ```json
@@ -103,8 +107,8 @@ Signup with additional fields.
 | `tags` | string[] | No | Tags (default: `[]`, max 50 tags, 100 chars each) |
 | `sheetTab` | string | No | Target sheet tab (same restrictions as `/api/signup`) |
 | `site` | string | No | Site name for multi-site support (max 100 chars) |
-| `metadata` | object | No | Arbitrary key-value metadata |
-| `turnstileToken` | string | No | Required if Turnstile is configured |
+| `metadata` | object | No | Arbitrary key-value metadata (max 50 top-level keys; max 10,000 chars when JSON-serialized; must be JSON-serializable) |
+| `turnstileToken` | string | No | Required if Turnstile is configured (max 4,096 chars) |
 
 **Success (200)**:
 ```json
@@ -141,9 +145,11 @@ Bulk signup for multiple emails (1-100 per request).
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `signups` | array | Yes | Array of signup objects (max 100) |
-| `turnstileToken` | string | No | Required at the request level if Turnstile is configured |
+| `turnstileToken` | string | No | Required at the request level if Turnstile is configured (max 4,096 chars) |
 
 Each signup object accepts the same fields as `/api/signup` except `turnstileToken`.
+Duplicate checks follow the same rule as `/api/signup`: an explicit `sheetTab` is
+tab-scoped, while an omitted tab checks all tabs before writing to the default.
 
 **Success (200)**:
 ```json
@@ -195,8 +201,8 @@ HTML form submission endpoint. Accepts `application/x-www-form-urlencoded` or `m
 | `site` | string | No | Site name |
 | `source` | string | No | Signup source (default: `"form"`) |
 | `tags` | string | No | Comma-separated tags (default: `"form-submit"`) |
-| `turnstileToken` | string | No | Direct Turnstile token |
-| `cf-turnstile-response` | string | No | Cloudflare's default form field name |
+| `turnstileToken` | string | No | Direct Turnstile token (max 4,096 chars) |
+| `cf-turnstile-response` | string | No | Cloudflare's default form field name (max 4,096 chars) |
 
 ```bash
 curl -X POST http://localhost:3000/api/signup/form \
@@ -211,7 +217,7 @@ Signup statistics for a sheet tab.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `sheetTab` | string | Yes | Sheet tab to query |
+| `sheetTab` | string | Yes | Sheet tab to query (trimmed; max 100 chars, cannot contain `: \ / ? * [ ]`) |
 
 **Success (200)**:
 ```json
@@ -280,6 +286,24 @@ Emails are trimmed, lowercased, and validated with Zod's email validator.
 - Leading and trailing whitespace is removed before validation
 - Invalid or malformed addresses are rejected with `Validation failed`
 
+### Metadata
+
+Metadata is an optional, string-keyed object stored as a JSON string in a single sheet cell. It is bounded before serialization so it cannot exceed a practical cell size or be used as an unbounded storage vector.
+
+- Max 50 top-level keys
+- Max 10,000 characters when JSON-serialized
+- Must be JSON-serializable (circular references and BigInt values are rejected)
+- Oversized or non-serializable metadata is rejected with `Validation failed` and a `metadata: ...` detail
+
+### Turnstile Token
+
+The optional request-level `turnstileToken` is trimmed before validation. It remains a non-empty string but is capped in length before it is forwarded to Cloudflare, so an oversized value is rejected up front rather than sent to (and stored by) the verification endpoint.
+
+- Max 4,096 characters (applied to the trimmed value)
+- Leading and trailing whitespace is removed before the length check
+- Applies to `/api/signup`, `/api/signup/extended`, the request-level token on `/api/signup/bulk`, and the built-in form (after mapping `turnstileToken` / `cf-turnstile-response`)
+- Oversized tokens are rejected with `Validation failed` and a `turnstileToken: ...` detail before any service is called
+
 ### Field Limits
 
 | Field | Max Length |
@@ -289,6 +313,8 @@ Emails are trimmed, lowercased, and validated with Zod's email validator.
 | `source` | 100 characters |
 | `sheetTab` | 100 characters |
 | `tags` | 50 items, 100 chars each |
+| `metadata` | 50 top-level keys; 10,000 chars JSON-serialized |
+| `turnstileToken` | 4,096 characters (applies to request-level and form tokens) |
 | `signups` (bulk) | 100 items |
 
 ## Status Codes

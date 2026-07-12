@@ -3,6 +3,15 @@
  * Creates inline signup forms with configurable options
  */
 
+/**
+ * Serialize a string into a safe JavaScript string literal.
+ * Interpolated URLs must never be inlined raw: a crafted value containing
+ * quotes, backslashes, or newlines could break out of the surrounding string
+ * literal and execute arbitrary code. JSON.stringify emits a fully escaped,
+ * valid JS string literal, neutralizing those characters.
+ */
+const jsString = (value: string): string => JSON.stringify(value);
+
 export const getEmbedScript = (apiBaseUrl: string): string => {
   return `
 (function() {
@@ -22,7 +31,7 @@ export const getEmbedScript = (apiBaseUrl: string): string => {
 
   async function fetchPublicConfig() {
     try {
-      const response = await fetch('${apiBaseUrl}/api/config');
+      const response = await fetch(${jsString(`${apiBaseUrl}/api/config`)});
       if (!response.ok) {
         return null;
       }
@@ -310,7 +319,7 @@ export const getEmbedScript = (apiBaseUrl: string): string => {
           data.turnstileToken = turnstileResult.token;
         }
 
-        const response = await fetch('${apiBaseUrl}/api/signup/extended', {
+        const response = await fetch(${jsString(`${apiBaseUrl}/api/signup/extended`)}, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(data)
@@ -370,7 +379,7 @@ export const getEmbedScript = (apiBaseUrl: string): string => {
     if (options.site) params.set('site', options.site);
     if (options.sheetTab) params.set('sheetTab', options.sheetTab);
 
-    const src = '${apiBaseUrl}/' + (params.toString() ? ('?' + params.toString()) : '');
+    const src = ${jsString(`${apiBaseUrl}/`)} + (params.toString() ? ('?' + params.toString()) : '');
 
     const frame = document.createElement('iframe');
     frame.src = src;

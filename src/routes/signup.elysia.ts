@@ -80,6 +80,21 @@ function getMediaType(contentType: string): string {
 }
 
 /**
+ * Resolve the externally visible protocol for proxy-terminated requests.
+ * Only the two supported HTTP schemes are trusted from the forwarded header.
+ */
+function getRequestProtocol(request: Request, url: URL): string {
+  const forwardedProto = request.headers
+    .get("x-forwarded-proto")
+    ?.split(",")[0]
+    ?.trim()
+    .toLowerCase();
+  return forwardedProto === "http" || forwardedProto === "https"
+    ? `${forwardedProto}:`
+    : url.protocol;
+}
+
+/**
  * Create Elysia app with all signup routes
  * @param context - Optional context for dependency injection (for testing)
  * @param elysiaOptions - Optional Elysia configuration options (e.g., { adapter: CloudflareAdapter })
@@ -110,7 +125,7 @@ export const createSignupRoutes = (
       // Embed script
       .get("/embed.js", ({ request }) => {
         const url = new URL(request.url);
-        const apiBaseUrl = `${url.protocol}//${url.host}`;
+        const apiBaseUrl = `${getRequestProtocol(request, url)}//${url.host}`;
         return new Response(getEmbedScript(apiBaseUrl), {
           headers: { "Content-Type": "application/javascript; charset=utf-8" },
         });

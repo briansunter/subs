@@ -332,6 +332,30 @@ describe("Embed Script Dynamic URL", () => {
     const body = await response.text();
     expect(body).toContain("https://secure.example.com");
   });
+
+  test("should honor a forwarded https protocol", async () => {
+    const app = createSignupRoutes(mockContext);
+    const response = await app.handle(
+      new Request("http://secure.example.com/embed.js", {
+        headers: { "X-Forwarded-Proto": "https" },
+      }),
+    );
+
+    const body = await response.text();
+    expect(body).toContain("https://secure.example.com");
+  });
+
+  test("should use the first forwarded protocol when a proxy sends a chain", async () => {
+    const app = createSignupRoutes(mockContext);
+    const response = await app.handle(
+      new Request("http://secure.example.com/embed.js", {
+        headers: { "X-Forwarded-Proto": "https, http" },
+      }),
+    );
+
+    const body = await response.text();
+    expect(body).toContain("https://secure.example.com");
+  });
 });
 
 describe("Form POST Endpoint", () => {

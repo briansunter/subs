@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.7](https://github.com/briansunter/subs/compare/subs-v0.1.6...subs-v0.1.7) (2026-09-18)
+
+
+### Features
+
+* auto-provision signup tabs per site ([db08f1f](https://github.com/briansunter/subs/commit/db08f1fd250a23f73c7513b13e5552b6a00d693a))
+
+
+### Bug Fixes
+
+* integrate proxied newsletter embeds ([450df8e](https://github.com/briansunter/subs/commit/450df8e0b97db2fad01a0466eb5c9c0a88c6f29e))
+
 ## [0.1.6](https://github.com/briansunter/subs/compare/subs-v0.1.5...subs-v0.1.6) (2026-07-12)
 
 

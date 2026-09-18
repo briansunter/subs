@@ -44,6 +44,25 @@ The API uses the Google Sheets API with a service account to read and write sign
 
 From the sheet URL: `https://docs.google.com/spreadsheets/d/[SHEET_ID]/edit`
 
+## Automatic per-site sheets
+
+To let a new landing page create its own tab on the first signup, enable
+automatic site tabs:
+
+```bash
+AUTO_PROVISION_SITES=true
+```
+
+The primary `GOOGLE_SHEET_ID` remains the only workbook. On the first signup
+for a site, Subs creates a tab named after the normalized site slug and writes
+that site's signups there. Existing `ALLOWED_SHEETS` mappings continue to take
+precedence for sites that still use explicitly mapped workbooks.
+
+New site values must be lowercase URL-style slugs such as `folio` or
+`storyscreen`. After this one-time setup, adding a landing page only requires
+the page to send its `site` value; no per-site Nix change or new workbook is
+needed.
+
 ### 7. Configure Environment
 
 Add to `.env`:
@@ -97,6 +116,8 @@ Check your Google Sheet - a new row should appear.
 - Verify the sheet is shared with the service account email
 - Set permission to **Editor** (not Viewer)
 - Wait 1-2 minutes for permissions to propagate
+- For automatic per-site tabs, verify the service account can edit the primary
+  workbook so it can create tabs.
 
 ### "Requested entity was not found"
 

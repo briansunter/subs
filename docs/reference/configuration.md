@@ -96,11 +96,27 @@ ENABLE_METRICS=false
 
 ### `ALLOWED_SHEETS`
 
-Multi-site support: map site names to different Google Sheet IDs.
+Optional static multi-site support: map site names to different Google Sheet IDs.
+Static mappings take precedence over automatic provisioning.
 
 ```bash
 ALLOWED_SHEETS=abc123:blog,def456:landing-page
 ```
+
+### `AUTO_PROVISION_SITES`
+
+When `true`, a signup for a site not present in `ALLOWED_SHEETS` creates a
+dedicated tab in the primary `GOOGLE_SHEET_ID` on the first request. The tab
+name is the normalized site slug, so adding a new landing page does not
+require a Nix config change or a new workbook.
+
+```bash
+AUTO_PROVISION_SITES=true
+```
+
+New site values use lowercase URL-style slugs (`letters`, `numbers`, and
+hyphens). Existing `ALLOWED_SHEETS` entries continue to route to their
+existing workbooks.
 
 ### `SHEET_TABS`
 
@@ -154,6 +170,7 @@ CLOUDFLARE_TURNSTILE_SECRET_KEY=0x4AAAAAxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 # Features
 ENABLE_METRICS=true
 # ALLOWED_SHEETS=sheetId1:site1,sheetId2:site2
+# AUTO_PROVISION_SITES=true
 # SHEET_TABS=Sheet1,Newsletter,Beta
 
 # Logging
@@ -173,6 +190,7 @@ The API validates all environment variables on startup using Zod. Missing or inv
 | `ALLOWED_ORIGINS` | `*` or comma-separated `http://` / `https://` origins without paths |
 | `ENABLE_METRICS` | `"true"` or `"false"` |
 | `ALLOWED_SHEETS` | `sheetId:siteName,...` format; duplicate site names are rejected |
+| `AUTO_PROVISION_SITES` | `"true"` or `"false"`; when true, unknown sites get tabs in `GOOGLE_SHEET_ID` |
 | `DEFAULT_SHEET_TAB`, `SHEET_TABS` | Valid Google Sheets tab names; duplicate tabs are rejected; `DEFAULT_SHEET_TAB` must be listed in `SHEET_TABS` when `SHEET_TABS` is set |
 | `LOG_LEVEL` | Valid Pino log level |
 

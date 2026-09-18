@@ -20,6 +20,7 @@ import {
   recordTurnstileVerification,
 } from "../services/metrics";
 import { appendSignup, emailExists, getSignupStats } from "../services/sheets";
+import { ensureSiteSheet } from "../services/site-sheets";
 import { verifyTurnstileToken } from "../services/turnstile";
 import { createChildLogger } from "../utils/logger";
 
@@ -35,6 +36,9 @@ export interface SignupContext {
     emailExists: typeof emailExists;
     getSignupStats: typeof getSignupStats;
   };
+  siteSheets?: {
+    ensureSiteSheet: typeof ensureSiteSheet;
+  };
   turnstile: {
     verifyTurnstileToken: typeof verifyTurnstileToken;
   };
@@ -42,33 +46,61 @@ export interface SignupContext {
 }
 
 /**
- * Resolve site name to sheetId
- * Returns the sheetId from allowedSheets map, or default googleSheetId if no site specified
- * Returns error if site is specified but not in allowlist
+ * Resolve a site to its workbook and tab.
+ * Static mappings remain authoritative; automatic provisioning creates a tab
+ * in the primary workbook when enabled.
  */
-function resolveSiteToSheetId(
+async function resolveSiteToSheetId(
   site: string | undefined,
-  config: SignupConfig,
-): { sheetId: string } | { error: HandlerResult } {
+  ctx: SignupContext,
+): Promise<{ sheetId: string; sheetTab?: string } | { error: HandlerResult }> {
+  const { config } = ctx;
   // If no site specified, use default sheet
   if (!site) {
     return { sheetId: config.googleSheetId };
   }
 
-  // Look up site in allowed sheets
+  // Look up pinned sites first so an operator can keep explicit mappings
+  // authoritative even after dynamic provisioning is enabled.
   const sheetId = config.allowedSheets.get(site);
-  if (!sheetId) {
-    return {
-      error: {
-        success: false,
-        statusCode: 400,
-        error: "Invalid site",
-        details: [`site: Site '${site}' is not configured`],
-      },
-    };
+  if (sheetId) {
+    return { sheetId };
   }
 
-  return { sheetId };
+  if (config.autoProvisionSites) {
+    if (!ctx.siteSheets) {
+      logger.error("Dynamic site provisioning is enabled without a site-sheet service");
+      return {
+        error: {
+          success: false,
+          statusCode: 500,
+          error: "Internal server error",
+        },
+      };
+    }
+
+    try {
+      return await ctx.siteSheets.ensureSiteSheet(site, config);
+    } catch (error) {
+      logger.error({ error }, "Failed to provision a site sheet tab");
+      return {
+        error: {
+          success: false,
+          statusCode: 500,
+          error: "Internal server error",
+        },
+      };
+    }
+  }
+
+  return {
+    error: {
+      success: false,
+      statusCode: 400,
+      error: "Invalid site",
+      details: [`site: Site '${site}' is not configured`],
+    },
+  };
 }
 
 /**
@@ -78,6 +110,7 @@ export function createDefaultContext(config?: SignupConfig): SignupContext {
   const currentConfig = config ?? getConfig();
   return {
     sheets: { appendSignup, emailExists, getSignupStats },
+    siteSheets: { ensureSiteSheet },
     turnstile: { verifyTurnstileToken },
     config: currentConfig,
   };
@@ -289,14 +322,14 @@ async function processSignupRequest<
   T extends {
     email: string;
     sheetTab?: string;
+    site?: string;
     turnstileToken?: string;
-    resolvedSheetId?: string;
   },
 >(
   data: T,
   ctx: SignupContext,
   route: string,
-  buildSignupData: (validated: T) => SignupData,
+  buildSignupData: (validated: T & { resolvedSheetId: string }) => SignupData,
   logMessage: string,
 ): Promise<HandlerResult> {
   const startTime = Date.now();
@@ -309,9 +342,19 @@ async function processSignupRequest<
       return turnstileResult;
     }
 
-    const resolvedConfig = data.resolvedSheetId
-      ? { ...ctx.config, googleSheetId: data.resolvedSheetId }
-      : ctx.config;
+    // Resolve/provision only after Turnstile succeeds. Otherwise a public
+    // request could create a new spreadsheet before bot protection runs.
+    const siteResolution = await resolveSiteToSheetId(data.site, ctx);
+    if ("error" in siteResolution) {
+      return siteResolution.error;
+    }
+
+    const resolvedConfig = { ...ctx.config, googleSheetId: siteResolution.sheetId };
+    const resolvedData = {
+      ...data,
+      sheetTab: siteResolution.sheetTab ?? data.sheetTab,
+      resolvedSheetId: siteResolution.sheetId,
+    } as T & { resolvedSheetId: string };
     // Lock the resolved (sheet, email) pair so the existence check and append
     // form one critical section. Process-local best effort.
     const lockKey = buildSignupLockKey(resolvedConfig.googleSheetId, data.email);
@@ -321,7 +364,11 @@ async function processSignupRequest<
       const sheetsStartTime = Date.now();
       let exists = false;
       try {
-        exists = await ctx.sheets.emailExists(data.email, data.sheetTab, resolvedConfig);
+        exists = await ctx.sheets.emailExists(
+          resolvedData.email,
+          resolvedData.sheetTab,
+          resolvedConfig,
+        );
         recordSheetsRequest("emailExists", true, (Date.now() - sheetsStartTime) / 1000);
       } catch (error) {
         recordSheetsRequest("emailExists", false, (Date.now() - sheetsStartTime) / 1000);
@@ -335,7 +382,7 @@ async function processSignupRequest<
       // Store in Google Sheets
       const appendStartTime = Date.now();
       try {
-        await ctx.sheets.appendSignup(buildSignupData(data), resolvedConfig);
+        await ctx.sheets.appendSignup(buildSignupData(resolvedData), resolvedConfig);
         recordSheetsRequest("appendSignup", true, (Date.now() - appendStartTime) / 1000);
       } catch (error) {
         recordSheetsRequest("appendSignup", false, (Date.now() - appendStartTime) / 1000);
@@ -389,14 +436,8 @@ export async function handleSignup(data: SignupInput, ctx: SignupContext): Promi
     return validation.result;
   }
 
-  // Resolve site to sheetId
-  const siteResolution = resolveSiteToSheetId(validation.data.site, ctx.config);
-  if ("error" in siteResolution) {
-    return siteResolution.error;
-  }
-
   return processSignupRequest(
-    { ...validation.data, resolvedSheetId: siteResolution.sheetId },
+    validation.data,
     ctx,
     "/api/signup",
     (validated) => ({
@@ -423,14 +464,8 @@ export async function handleExtendedSignup(
     return validation.result;
   }
 
-  // Resolve site to sheetId
-  const siteResolution = resolveSiteToSheetId(validation.data.site, ctx.config);
-  if ("error" in siteResolution) {
-    return siteResolution.error;
-  }
-
   return processSignupRequest(
-    { ...validation.data, resolvedSheetId: siteResolution.sheetId },
+    validation.data,
     ctx,
     "/api/signup/extended",
     (validated) => ({
@@ -480,14 +515,15 @@ export async function handleBulkSignup(
     for (const signup of signups) {
       try {
         // Resolve site to sheetId
-        const siteResolution = resolveSiteToSheetId(signup.site, ctx.config);
+        const siteResolution = await resolveSiteToSheetId(signup.site, ctx);
         if ("error" in siteResolution) {
           results.failed++;
           results.errors.push(`${signup.email}: Invalid site '${signup.site}'`);
           continue;
         }
 
-        const targetSheetTab = signup.sheetTab || ctx.config.defaultSheetTab;
+        const targetSheetTab =
+          siteResolution.sheetTab ?? signup.sheetTab ?? ctx.config.defaultSheetTab;
         // Keep in-request deduplication scoped to the target tab, while the
         // process-local lock below is scoped to sheet/email so all-tab checks
         // cannot race with operations targeting another tab.
@@ -510,7 +546,8 @@ export async function handleBulkSignup(
           const sheetsStartTime = Date.now();
           let exists = false;
           try {
-            exists = await ctx.sheets.emailExists(signup.email, signup.sheetTab, resolvedConfig);
+            const duplicateCheckTab = siteResolution.sheetTab ?? signup.sheetTab;
+            exists = await ctx.sheets.emailExists(signup.email, duplicateCheckTab, resolvedConfig);
             recordSheetsRequest("emailExists", true, (Date.now() - sheetsStartTime) / 1000);
           } catch (error) {
             recordSheetsRequest("emailExists", false, (Date.now() - sheetsStartTime) / 1000);

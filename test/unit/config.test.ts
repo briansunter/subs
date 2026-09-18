@@ -56,6 +56,7 @@ describe("Configuration - Unit Tests", () => {
       expect(config.host).toBe("0.0.0.0"); // Default HOST
       expect(config.defaultSheetTab).toBe("Sheet1"); // Default sheet tab
       expect(config.sheetTabs).toEqual(["Sheet1"]);
+      expect(config.autoProvisionSites).toBe(false);
     });
 
     test("should transform PORT string to number", () => {
@@ -176,6 +177,12 @@ describe("Configuration - Unit Tests", () => {
       expect(() => loadConfig({ SHEET_TABS: "Sheet1,Bad/Tab" })).toThrow(
         "Sheet tab name cannot contain",
       );
+    });
+
+    test("should parse dynamic site provisioning settings", () => {
+      const config = loadConfig({ AUTO_PROVISION_SITES: "true" });
+
+      expect(config.autoProvisionSites).toBe(true);
     });
   });
 

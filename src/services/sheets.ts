@@ -98,9 +98,7 @@ async function generateSignedJWT(config: SignupConfig): Promise<string> {
   const privateKey = await importPKCS8(config.googlePrivateKey, "RS256");
 
   // Create and sign the JWT
-  const jwt = await new SignJWT({
-    scope: "https://www.googleapis.com/auth/spreadsheets",
-  })
+  const jwt = await new SignJWT({ scope: "https://www.googleapis.com/auth/spreadsheets" })
     .setProtectedHeader({ alg: "RS256", typ: "JWT" })
     .setIssuedAt(now)
     .setExpirationTime(expiry)
@@ -192,11 +190,11 @@ async function getAccessToken(config: SignupConfig): Promise<string> {
 }
 
 /**
- * Make an authenticated request to the Google Sheets API
+ * Make an authenticated request to a Google API
  * Handles token refresh on 401 responses
  * Uses Zod schema for type-safe response validation
  */
-async function sheetsRequest<T extends z.ZodTypeAny>(
+export async function sheetsRequest<T extends z.ZodTypeAny>(
   endpoint: string,
   schema: T,
   config: SignupConfig,

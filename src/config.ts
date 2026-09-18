@@ -144,6 +144,10 @@ const envSchema = z.object({
       return map;
     }),
 
+  // Dynamic multi-site support. When enabled, unknown site names provision a
+  // dedicated tab in the primary workbook on the first signup.
+  AUTO_PROVISION_SITES: booleanEnv("false"),
+
   // Configurable sheet tabs (comma-separated)
   SHEET_TABS: z
     .string()
@@ -226,6 +230,10 @@ export interface SignupConfig {
   // Multi-site support: siteName -> sheetId
   allowedSheets: Map<string, string>;
 
+  // Dynamic multi-site support. Optional on the interface for lightweight
+  // test/application fixtures that only exercise static mappings.
+  autoProvisionSites?: boolean;
+
   // Configurable sheet tabs
   sheetTabs: string[];
 }
@@ -251,6 +259,7 @@ export function loadEnv(envSource: EnvSource = getRuntimeEnv()): SignupConfig {
     nodeEnv: env.NODE_ENV,
     logLevel: env.LOG_LEVEL,
     allowedSheets: env.ALLOWED_SHEETS,
+    autoProvisionSites: env.AUTO_PROVISION_SITES,
     sheetTabs: env.SHEET_TABS ?? [env.DEFAULT_SHEET_TAB],
   };
 }

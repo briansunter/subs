@@ -29,6 +29,7 @@ compatibility_flags = ["nodejs_compat"]
 # - DEFAULT_SHEET_TAB (defaults to "Sheet1")
 # - SHEET_TABS (optional comma-separated tab allowlist)
 # - ALLOWED_SHEETS (optional sheetId:siteName mappings)
+# - AUTO_PROVISION_SITES (defaults to false; creates tabs in GOOGLE_SHEET_ID)
 # - ENABLE_METRICS (defaults to "true")
 # - LOG_LEVEL (defaults to "info")
 

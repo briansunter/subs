@@ -234,6 +234,67 @@ describe("Route Handlers - Unit Tests", () => {
       expect(result.success).toBe(true);
       expect(checkedSheetIds).toEqual(["siteA-sheet-id"]);
     });
+
+    test("should dynamically resolve an unknown site after Turnstile succeeds", async () => {
+      const resolvedSheetIds: string[] = [];
+      const siteContext: SignupContext = {
+        ...mockContext,
+        config: {
+          ...mockContext.config,
+          autoProvisionSites: true,
+          turnstileSecretKey: "turnstile-secret",
+        },
+        siteSheets: {
+          ensureSiteSheet: async () => ({
+            sheetId: "dynamic-sheet-id",
+            sheetTab: "new-site",
+          }),
+        },
+        sheets: {
+          ...mockContext.sheets,
+          emailExists: async (_email, _sheetTab, config) => {
+            resolvedSheetIds.push(config.googleSheetId);
+            return false;
+          },
+        },
+      };
+
+      const result = await handleSignup(
+        { email: "dynamic@example.com", site: "new-site", turnstileToken: "valid-token" },
+        siteContext,
+      );
+
+      expect(result.success).toBe(true);
+      expect(resolvedSheetIds).toEqual(["dynamic-sheet-id"]);
+    });
+
+    test("should not provision a site when Turnstile rejects the request", async () => {
+      let provisionCalls = 0;
+      mockTurnstileService.setError("invalid token");
+      const siteContext: SignupContext = {
+        ...mockContext,
+        config: {
+          ...mockContext.config,
+          autoProvisionSites: true,
+          turnstileSecretKey: "turnstile-secret",
+        },
+        siteSheets: {
+          ensureSiteSheet: async () => {
+            provisionCalls++;
+            return { sheetId: "dynamic-sheet-id", sheetTab: "new-site" };
+          },
+        },
+      };
+
+      const result = await handleSignup(
+        { email: "blocked@example.com", site: "new-site", turnstileToken: "invalid-token" },
+        siteContext,
+      );
+
+      expect(result.success).toBe(false);
+      expect(result.statusCode).toBe(400);
+      expect(provisionCalls).toBe(0);
+    });
   });
 
   describe("handleExtendedSignup", () => {
